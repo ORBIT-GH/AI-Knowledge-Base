@@ -6,6 +6,7 @@ SYMBOL_NAMES = {
     "SH": "烧碱",
     "V": "PVC",
     "JM": "焦煤",
+    "M": "豆粕",
 }
 
 DEFAULT_CONTRACT = "MAIN"

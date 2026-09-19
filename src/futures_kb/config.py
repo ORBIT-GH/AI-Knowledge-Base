@@ -15,6 +15,10 @@ class Settings:
     api_key: str | None = None
     api_host: str = "127.0.0.1"
     api_port: int = 8787
+    backend: str = "native"
+    futures_intel_root: Path | None = None
+    futures_intel_config: Path | None = None
+    futures_intel_timeout_seconds: int = 300
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -34,4 +38,16 @@ class Settings:
             api_key=os.getenv("FUTURES_KB_API_KEY") or None,
             api_host=os.getenv("FUTURES_KB_API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("FUTURES_KB_API_PORT", "8787")),
+            backend=os.getenv("FUTURES_KB_BACKEND", "native").strip().lower(),
+            futures_intel_root=_optional_path(os.getenv("FUTURES_INTEL_ROOT")),
+            futures_intel_config=_optional_path(os.getenv("FUTURES_INTEL_CONFIG")),
+            futures_intel_timeout_seconds=int(
+                os.getenv("FUTURES_INTEL_TIMEOUT_SECONDS", "300")
+            ),
         )
+
+
+def _optional_path(value: str | None) -> Path | None:
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()

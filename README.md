@@ -271,6 +271,7 @@ tests/                单元、API、MCP 和 stdio 集成测试
 - [MCP 与 OpenClaw 接入](docs/05-mcp-and-openclaw.md)
 - [往期报告存储](docs/06-report-storage.md)
 - [GitHub 发布流程](docs/07-github-release.md)
+- [FuturesIntelTool 兼容](docs/08-futures-intel-compatibility.md)
 
 ## Roadmap
 
