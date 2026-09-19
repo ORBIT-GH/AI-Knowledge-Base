@@ -60,3 +60,12 @@ gh release create v0.1.0 `
 - 没有提交 `data/`、`.env`、Cookie、API Key 或真实交易数据。
 - Release 包含 wheel、sdist 和源码 ZIP。
 - 版本号与 Git tag 一致。
+## 一键构建
+
+提交全部改动并确保测试通过后，可以运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build_release.ps1 -Version 0.1.0
+```
+
+脚本会依次执行测试、编译检查、构建 wheel/sdist，并生成源码 ZIP。

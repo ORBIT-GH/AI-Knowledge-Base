@@ -18,3 +18,9 @@ config/crawlers.local.json
 # Editors
 .idea/
 .vscode/
+
+# Build and release output
+dist/
+build/
+*.egg-info/
+.ruff_cache/
