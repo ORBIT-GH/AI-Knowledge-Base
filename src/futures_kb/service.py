@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import hashlib
 from typing import Iterable
 
 from futures_kb.config import Settings
@@ -11,6 +11,7 @@ from futures_kb.database import Database
 from futures_kb.models import (
     ManualMetricInput,
     MarketBarInput,
+    ReportInput,
     ResearchNoteInput,
 )
 from futures_kb.reporting import build_daily_report_context, estimate_tokens
@@ -62,6 +63,111 @@ class FuturesDataService:
             "accepted": accepted,
             "trade_dates": sorted({item["trade_date"] for item in validated}),
             "symbols": sorted({item["symbol"] for item in validated}),
+        }
+
+    def save_report(self, payload: ReportInput) -> dict[str, object]:
+        trade_date = validate_trade_date(payload.trade_date)
+        title = payload.title.strip()
+        content = payload.content.strip()
+        report_type = payload.report_type.strip().lower() or "daily"
+        source = payload.source.strip() or "openclaw"
+        symbols = list(
+            dict.fromkeys(normalize_symbol(item) for item in payload.symbols)
+        )
+        summary = payload.summary.strip()
+        if not summary:
+            summary = content[:180].replace("\n", " ")
+            if len(content) > 180:
+                summary += "…"
+
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        identity = f"{trade_date}|{report_type}|{title}|{source}"
+        report_id = "rep_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+        existing = self.database.get_report(report_id)
+        self.database.upsert_report(
+            {
+                "id": report_id,
+                "trade_date": trade_date,
+                "title": title,
+                "report_type": report_type,
+                "symbols": symbols,
+                "summary": summary,
+                "content": content,
+                "source": source,
+                "content_hash": content_hash,
+            }
+        )
+        return {
+            "report_id": report_id,
+            "saved": True,
+            "updated": existing is not None,
+            "trade_date": trade_date,
+            "token_estimate": estimate_tokens(content),
+        }
+
+    def list_reports(
+        self,
+        *,
+        query: str | None = None,
+        symbols: list[str] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 5,
+    ) -> dict[str, object]:
+        normalized_symbols = list(normalize_symbols(symbols)) if symbols else None
+        reports = self.database.list_reports(
+            query=query,
+            symbols=normalized_symbols,
+            date_from=validate_trade_date(date_from) if date_from else None,
+            date_to=validate_trade_date(date_to) if date_to else None,
+            limit=max(1, min(limit, 10)),
+        )
+        items = [
+            {
+                "report_id": item["id"],
+                "trade_date": item["trade_date"],
+                "title": item["title"],
+                "report_type": item["report_type"],
+                "symbols": item["symbols"],
+                "summary": item["summary"][:240],
+                "source": item["source"],
+                "updated_at": item["updated_at"],
+                "content_chars": item["content_chars"],
+            }
+            for item in reports
+        ]
+        result: dict[str, object] = {"reports": items}
+        result["token_estimate"] = estimate_tokens(result)
+        return result
+
+    def read_report(
+        self,
+        report_id: str,
+        *,
+        offset: int = 0,
+        max_tokens: int = 2000,
+    ) -> dict[str, object]:
+        report = self.database.get_report(report_id)
+        if report is None:
+            raise ValueError(f"report not found: {report_id}")
+        safe_max_tokens = max(200, min(max_tokens, 4000))
+        content, next_offset, truncated = _slice_text_by_token_budget(
+            str(report["content"]),
+            offset=max(0, offset),
+            max_tokens=safe_max_tokens,
+        )
+        return {
+            "report_id": report["id"],
+            "trade_date": report["trade_date"],
+            "title": report["title"],
+            "report_type": report["report_type"],
+            "symbols": report["symbols"],
+            "content": content,
+            "offset": max(0, offset),
+            "next_offset": next_offset,
+            "truncated": truncated,
+            "content_token_estimate": estimate_tokens(content),
+            "total_token_estimate": estimate_tokens(report["content"]),
         }
 
     def run_crawler(self, source: str, trade_date: str) -> dict:
@@ -118,6 +224,26 @@ def create_service(
         raw_data_dir=effective_settings.raw_data_dir,
     )
     return FuturesDataService(effective_database, effective_crawler)
+
+
+def _slice_text_by_token_budget(
+    text: str, *, offset: int, max_tokens: int
+) -> tuple[str, int, bool]:
+    safe_offset = max(0, min(offset, len(text)))
+    remaining = text[safe_offset:]
+    if estimate_tokens(remaining) <= max_tokens:
+        return remaining, len(text), False
+
+    low = 0
+    high = len(remaining)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if estimate_tokens(remaining[:middle]) <= max_tokens:
+            low = middle
+        else:
+            high = middle - 1
+    clipped = remaining[:low]
+    return clipped, safe_offset + low, True
 
 
 def _validated_market_bar(payload: MarketBarInput) -> dict:

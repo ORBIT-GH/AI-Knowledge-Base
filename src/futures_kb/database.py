@@ -78,6 +78,23 @@ CREATE TABLE IF NOT EXISTS crawler_runs (
 
 CREATE INDEX IF NOT EXISTS idx_crawler_runs_lookup
     ON crawler_runs (source, trade_date, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS past_reports (
+    id TEXT PRIMARY KEY,
+    trade_date TEXT NOT NULL,
+    title TEXT NOT NULL,
+    report_type TEXT NOT NULL DEFAULT 'daily',
+    symbols_json TEXT NOT NULL DEFAULT '[]',
+    summary TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'openclaw',
+    content_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_past_reports_lookup
+    ON past_reports (trade_date DESC, report_type, updated_at DESC);
 """
 
 
@@ -411,6 +428,107 @@ class Database:
                 ),
             )
 
+    def upsert_report(self, record: Mapping[str, Any]) -> str:
+        report_id = str(record["id"])
+        created_at = str(record.get("created_at") or utc_now_iso())
+        updated_at = utc_now_iso()
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO past_reports (
+                    id, trade_date, title, report_type, symbols_json, summary,
+                    content, source, content_hash, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    trade_date = excluded.trade_date,
+                    title = excluded.title,
+                    report_type = excluded.report_type,
+                    symbols_json = excluded.symbols_json,
+                    summary = excluded.summary,
+                    content = excluded.content,
+                    source = excluded.source,
+                    content_hash = excluded.content_hash,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    report_id,
+                    str(record["trade_date"]),
+                    str(record["title"]),
+                    str(record.get("report_type") or "daily"),
+                    json.dumps(record.get("symbols", []), ensure_ascii=False),
+                    str(record.get("summary") or ""),
+                    str(record["content"]),
+                    str(record.get("source") or "openclaw"),
+                    str(record["content_hash"]),
+                    created_at,
+                    updated_at,
+                ),
+            )
+        return report_id
+
+    def get_report(self, report_id: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, trade_date, title, report_type, symbols_json, summary,
+                       content, source, content_hash, created_at, updated_at
+                FROM past_reports
+                WHERE id = ?
+                """,
+                (report_id,),
+            ).fetchone()
+        return _report_row(row) if row else None
+
+    def list_reports(
+        self,
+        *,
+        query: str | None = None,
+        symbols: Sequence[str] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        if date_from:
+            clauses.append("trade_date >= ?")
+            parameters.append(date_from)
+        if date_to:
+            clauses.append("trade_date <= ?")
+            parameters.append(date_to)
+        if query:
+            pattern = f"%{query.strip()}%"
+            clauses.append("(title LIKE ? OR summary LIKE ? OR content LIKE ?)")
+            parameters.extend([pattern, pattern, pattern])
+
+        sql = """
+            SELECT id, trade_date, title, report_type, symbols_json, summary,
+                   source, content_hash, created_at, updated_at,
+                   LENGTH(content) AS content_chars
+            FROM past_reports
+        """
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY trade_date DESC, updated_at DESC LIMIT ?"
+        parameters.append(max(limit * 5, limit))
+
+        with self.connect() as connection:
+            rows = connection.execute(sql, parameters).fetchall()
+
+        requested = {item.upper() for item in symbols or []}
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            item_symbols = set(json.loads(row["symbols_json"] or "[]"))
+            if requested and not requested.intersection(item_symbols):
+                continue
+            item = dict(row)
+            item["symbols"] = sorted(item_symbols)
+            item.pop("symbols_json", None)
+            results.append(item)
+            if len(results) >= limit:
+                break
+        return results
+
     def get_latest_crawler_runs(
         self, symbols: Sequence[str], as_of_date: str
     ) -> dict[str, dict[str, Any]]:
@@ -431,6 +549,12 @@ class Database:
                 if row:
                     result[symbol.upper()] = dict(row)
         return result
+
+
+def _report_row(row: sqlite3.Row) -> dict[str, Any]:
+    report = dict(row)
+    report["symbols"] = sorted(json.loads(report.pop("symbols_json") or "[]"))
+    return report
 
 
 def _optional_float(value: Any) -> float | None:

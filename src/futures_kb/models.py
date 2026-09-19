@@ -47,6 +47,18 @@ class ResearchNoteInput(BaseModel):
     symbols: list[str] = Field(default_factory=list)
 
 
+class ReportInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trade_date: str
+    title: str = Field(min_length=1, max_length=300)
+    content: str = Field(min_length=1)
+    report_type: str = Field(default="daily", max_length=32)
+    symbols: list[str] = Field(default_factory=list)
+    summary: str = Field(default="", max_length=1000)
+    source: str = Field(default="openclaw", max_length=200)
+
+
 def market_bar_record(payload: MarketBarInput) -> dict[str, Any]:
     return payload.model_dump()
 

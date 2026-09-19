@@ -15,6 +15,7 @@ from futures_kb.database import Database
 from futures_kb.models import (
     ManualMetricInput,
     MarketBarInput,
+    ReportInput,
     ResearchNoteInput,
 )
 from futures_kb.service import FuturesDataService, create_service
@@ -70,6 +71,38 @@ def create_app(
     @app.post("/api/v1/research", dependencies=[Depends(authorize)])
     def upsert_research(payload: list[ResearchNoteInput]) -> dict[str, int]:
         return {"upserted": effective_service.upsert_research_notes(payload)}
+
+    @app.post("/api/v1/reports", dependencies=[Depends(authorize)])
+    def save_report(payload: ReportInput) -> dict[str, object]:
+        return effective_service.save_report(payload)
+
+    @app.get("/api/v1/reports", dependencies=[Depends(authorize)])
+    def list_reports(
+        query: str | None = Query(default=None),
+        symbols: str | None = Query(default=None, description="Comma-separated symbols"),
+        date_from: str | None = Query(default=None),
+        date_to: str | None = Query(default=None),
+        limit: int = Query(default=5, ge=1, le=10),
+    ) -> dict[str, object]:
+        return effective_service.list_reports(
+            query=query,
+            symbols=symbols.split(",") if symbols else None,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+
+    @app.get("/api/v1/reports/{report_id}", dependencies=[Depends(authorize)])
+    def read_report(
+        report_id: str,
+        offset: int = Query(default=0, ge=0),
+        max_tokens: int = Query(default=2000, ge=200, le=4000),
+    ) -> dict[str, object]:
+        return effective_service.read_report(
+            report_id,
+            offset=offset,
+            max_tokens=max_tokens,
+        )
 
     @app.post("/api/v1/crawlers/{source}/run", dependencies=[Depends(authorize)])
     def run_crawler(source: str, trade_date: str = Query(...)) -> dict:

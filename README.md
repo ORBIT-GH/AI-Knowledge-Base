@@ -34,3 +34,4 @@ uv run futures-kb-mcp
 - [存储与特征](docs/03-storage-and-features.md)
 - [API 与爬虫](docs/04-api-and-crawler.md)
 - [MCP 与 OpenClaw 接入](docs/05-mcp-and-openclaw.md)
+- [往期报告存储](docs/06-report-storage.md)

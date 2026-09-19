@@ -53,3 +53,12 @@
 - 爬虫测试使用本地假爬虫，不访问网络。
 - 端到端测试验证数据导入到日报数据包完整链路。
 - MCP stdio 集成测试会启动真实子进程，验证工具发现和日报数据包调用。
+
+## 6. 往期报告
+
+1. OpenClaw 生成报告后调用 `report_save`。
+2. 报告写入 `past_reports` 表。
+3. 普通日报生成不自动读取往期报告。
+4. 用户要求历史比较时，AI 先调用 `report_list`。
+5. AI 选择 `report_id` 后调用 `report_read`。
+6. `report_read` 按 token 预算返回正文，需要时使用 `next_offset` 继续读取。
