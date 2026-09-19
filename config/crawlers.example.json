@@ -1,0 +1,41 @@
+{
+  "SH": {
+    "command": [
+      "python",
+      "examples/fake_crawler.py",
+      "--source",
+      "SH",
+      "--trade-date",
+      "{trade_date}",
+      "--output",
+      "{output_path}"
+    ],
+    "timeout_seconds": 30
+  },
+  "V": {
+    "command": [
+      "python",
+      "examples/fake_crawler.py",
+      "--source",
+      "V",
+      "--trade-date",
+      "{trade_date}",
+      "--output",
+      "{output_path}"
+    ],
+    "timeout_seconds": 30
+  },
+  "JM": {
+    "command": [
+      "python",
+      "examples/fake_crawler.py",
+      "--source",
+      "JM",
+      "--trade-date",
+      "{trade_date}",
+      "--output",
+      "{output_path}"
+    ],
+    "timeout_seconds": 30
+  }
+}
