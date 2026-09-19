@@ -5,7 +5,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from futures_kb.config import Settings
 from futures_kb.futures_intel import FuturesIntelAdapter
+from futures_kb.service import create_service
 
 
 def build_futures_intel_fixture(root: Path) -> Path:
@@ -300,4 +302,32 @@ def test_adapter_runs_configured_refresh_command(tmp_path: Path) -> None:
     assert result["source"] == "FuturesIntelTool"
     assert result["anomaly_count"] == 0
     assert "daily-brief" not in json.dumps(result)
+
+
+def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
+    root = build_futures_intel_fixture(tmp_path)
+    settings = Settings(
+        database_path=tmp_path / "native.sqlite3",
+        crawler_config_path=tmp_path / "crawlers.json",
+        raw_data_dir=tmp_path / "raw",
+        backend="futures-intel",
+        futures_intel_root=root,
+    )
+    service = create_service(settings=settings)
+
+    packet = service.report_context("2026-09-10", symbols=["SH"])
+    assert packet["source"] == "FuturesIntelTool"
+    assert packet["symbols"]["SH"]["metrics"]["contract"] == "SH2611"
+
+    listing = service.list_reports(
+        date_from="2026-09-10",
+        date_to="2026-09-10",
+    )
+    assert listing["reports"][0]["report_id"] == "fi_daily_2026-09-10"
+
+    report = service.read_report("fi_daily_2026-09-10", max_tokens=2000)
+    assert "烧碱 SH2611" in report["content"]
+
+    news = service.search_research("检修", symbols=["SH"], limit=3)
+    assert news["results"][0]["id"] == "news-1"
 

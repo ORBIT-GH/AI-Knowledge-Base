@@ -22,6 +22,7 @@ Futures AI KB 把这些数据放在独立服务中，只向 OpenClaw 返回当�
 ## 核心特性
 
 - SQLite 行情、手工指标、资讯、爬虫运行记录和往期报告存储。
+- FuturesIntelTool SQLite 和日报目录只读兼容。
 - 烧碱、PVC、焦煤日线特征计算。
 - MA5、MA20、1/5 日涨跌、持仓变化、成交量 Z-Score、基差和异常标记。
 - MCP stdio 与 Streamable HTTP。
@@ -272,6 +273,7 @@ tests/                单元、API、MCP 和 stdio 集成测试
 - [往期报告存储](docs/06-report-storage.md)
 - [GitHub 发布流程](docs/07-github-release.md)
 - [FuturesIntelTool 兼容](docs/08-futures-intel-compatibility.md)
+- [Skill 流程](docs/09-skill-pipeline.md)
 
 ## Roadmap
 

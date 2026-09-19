@@ -84,10 +84,26 @@ http://127.0.0.1:8790/mcp
 
 最多返回三条短摘要。完整文章继续保存在 SQLite。
 
-## 5. 安装 Skill
+## 5. 安装 Skills
 
-将仓库的 `skills/futures-daily-report` 复制或链接到 OpenClaw 的 workspace skill 根目录。OpenClaw 选择 Skill 后，会遵守以下边界：
+将以下目录复制或链接到 OpenClaw 的 workspace skill 根目录：
 
+```text
+skills/futures-intel-source
+skills/ai-knowledge-base
+skills/futures-daily-report
+```
+
+如果使用 FuturesIntelTool 作为数据后端，在启动 MCP 前设置：
+
+```powershell
+$env:FUTURES_KB_BACKEND = "futures-intel"
+$env:FUTURES_INTEL_ROOT = "$env:LOCALAPPDATA\FuturesIntelTool"
+```
+
+OpenClaw 选择 Skill 后，会遵守以下边界：
+
+- 先按 `futures-intel-source` 检查或刷新数据。
 - 每次报告只调用一次 `daily_report_context`。
 - 不让模型读取原始数据。
 - 不自行计算指标。

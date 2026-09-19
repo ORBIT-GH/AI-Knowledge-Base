@@ -8,6 +8,7 @@ from typing import Iterable
 from futures_kb.config import Settings
 from futures_kb.crawler import CrawlerRunner
 from futures_kb.database import Database
+from futures_kb.futures_intel import FuturesIntelAdapter
 from futures_kb.models import (
     ManualMetricInput,
     MarketBarInput,
@@ -28,9 +29,16 @@ from futures_kb.validation import (
 class FuturesDataService:
     """Validated use cases exposed to transport layers."""
 
-    def __init__(self, database: Database, crawler_runner: CrawlerRunner) -> None:
+    def __init__(
+        self,
+        database: Database,
+        crawler_runner: CrawlerRunner,
+        *,
+        futures_intel_adapter: FuturesIntelAdapter | None = None,
+    ) -> None:
         self.database = database
         self.crawler_runner = crawler_runner
+        self.futures_intel_adapter = futures_intel_adapter
 
     def upsert_market_bars(self, payloads: Iterable[MarketBarInput]) -> int:
         records = [_validated_market_bar(item) for item in payloads]
@@ -47,10 +55,17 @@ class FuturesDataService:
     def report_context(
         self, trade_date: str, *, symbols: list[str] | None = None
     ) -> dict:
+        normalized_date = validate_trade_date(trade_date)
+        normalized_symbols = list(normalize_symbols(symbols)) if symbols else None
+        if self.futures_intel_adapter is not None:
+            return self.futures_intel_adapter.build_daily_report_context(
+                normalized_date,
+                symbols=normalized_symbols,
+            )
         return build_daily_report_context(
             self.database,
-            validate_trade_date(trade_date),
-            symbols=normalize_symbols(symbols) if symbols else None,
+            normalized_date,
+            symbols=normalized_symbols,
         )
 
     def submit_manual_metrics(
@@ -115,28 +130,37 @@ class FuturesDataService:
         limit: int = 5,
     ) -> dict[str, object]:
         normalized_symbols = list(normalize_symbols(symbols)) if symbols else None
+        safe_limit = max(1, min(limit, 10))
+        normalized_from = validate_trade_date(date_from) if date_from else None
+        normalized_to = validate_trade_date(date_to) if date_to else None
         reports = self.database.list_reports(
             query=query,
             symbols=normalized_symbols,
-            date_from=validate_trade_date(date_from) if date_from else None,
-            date_to=validate_trade_date(date_to) if date_to else None,
-            limit=max(1, min(limit, 10)),
+            date_from=normalized_from,
+            date_to=normalized_to,
+            limit=safe_limit,
         )
-        items = [
-            {
-                "report_id": item["id"],
-                "trade_date": item["trade_date"],
-                "title": item["title"],
-                "report_type": item["report_type"],
-                "symbols": item["symbols"],
-                "summary": item["summary"][:240],
-                "source": item["source"],
-                "updated_at": item["updated_at"],
-                "content_chars": item["content_chars"],
-            }
-            for item in reports
-        ]
-        result: dict[str, object] = {"reports": items}
+        items = [_compact_native_report(item) for item in reports]
+        if self.futures_intel_adapter is not None:
+            items.extend(
+                _compact_futures_intel_report(item)
+                for item in self.futures_intel_adapter.list_reports(
+                    query=query,
+                    symbols=normalized_symbols,
+                    date_from=normalized_from,
+                    date_to=normalized_to,
+                    limit=safe_limit,
+                )
+            )
+        deduplicated: dict[str, dict[str, object]] = {}
+        for item in items:
+            deduplicated[str(item["report_id"])] = item
+        ordered = sorted(
+            deduplicated.values(),
+            key=lambda item: (str(item["trade_date"]), str(item["updated_at"])),
+            reverse=True,
+        )[:safe_limit]
+        result: dict[str, object] = {"reports": ordered}
         result["token_estimate"] = estimate_tokens(result)
         return result
 
@@ -147,6 +171,12 @@ class FuturesDataService:
         offset: int = 0,
         max_tokens: int = 2000,
     ) -> dict[str, object]:
+        if report_id.startswith("fi_") and self.futures_intel_adapter is not None:
+            return self.futures_intel_adapter.read_report(
+                report_id,
+                offset=offset,
+                max_tokens=max_tokens,
+            )
         report = self.database.get_report(report_id)
         if report is None:
             raise ValueError(f"report not found: {report_id}")
@@ -171,7 +201,14 @@ class FuturesDataService:
         }
 
     def run_crawler(self, source: str, trade_date: str) -> dict:
-        return self.crawler_runner.run(source, trade_date)
+        normalized_symbol = normalize_symbol(source)
+        normalized_date = validate_trade_date(trade_date)
+        if self.futures_intel_adapter is not None:
+            return self.futures_intel_adapter.run_refresh(
+                normalized_date,
+                mode="run",
+            )
+        return self.crawler_runner.run(normalized_symbol, normalized_date)
 
     def search_research(
         self,
@@ -183,27 +220,35 @@ class FuturesDataService:
         normalized_symbols = (
             list(normalize_symbols(symbols)) if symbols else None
         )
-        items = self.database.search_research(
-            query,
-            symbols=normalized_symbols,
-            limit=max(1, min(limit, 3)),
-        )
-        results = []
-        for item in items:
-            content = str(item.get("content") or "").strip().replace("\n", " ")
-            excerpt = content[:180]
-            if len(content) > 180:
-                excerpt += "…"
-            results.append(
-                {
-                    "id": item["id"],
-                    "title": item["title"],
-                    "excerpt": excerpt,
-                    "source": item["source"],
-                    "published_at": item["published_at"],
-                    "symbols": item.get("symbols", []),
-                }
+        safe_limit = max(1, min(limit, 3))
+        if self.futures_intel_adapter is not None:
+            results = self.futures_intel_adapter.search_news(
+                query,
+                symbols=normalized_symbols,
+                limit=safe_limit,
             )
+        else:
+            items = self.database.search_research(
+                query,
+                symbols=normalized_symbols,
+                limit=safe_limit,
+            )
+            results = []
+            for item in items:
+                content = str(item.get("content") or "").strip().replace("\n", " ")
+                excerpt = content[:180]
+                if len(content) > 180:
+                    excerpt += "…"
+                results.append(
+                    {
+                        "id": item["id"],
+                        "title": item["title"],
+                        "excerpt": excerpt,
+                        "source": item["source"],
+                        "published_at": item["published_at"],
+                        "symbols": item.get("symbols", []),
+                    }
+                )
         payload = {"query": query, "results": results}
         payload["token_estimate"] = estimate_tokens(payload)
         return payload
@@ -223,7 +268,50 @@ def create_service(
         config_path=effective_settings.crawler_config_path,
         raw_data_dir=effective_settings.raw_data_dir,
     )
-    return FuturesDataService(effective_database, effective_crawler)
+
+    backend = effective_settings.backend.strip().lower()
+    if backend not in {"native", "futures-intel"}:
+        raise ValueError(f"unsupported backend: {effective_settings.backend}")
+    futures_intel_adapter = None
+    if backend == "futures-intel":
+        futures_intel_adapter = FuturesIntelAdapter(
+            root=effective_settings.futures_intel_root,
+            config_path=effective_settings.futures_intel_config,
+            timeout_seconds=effective_settings.futures_intel_timeout_seconds,
+        )
+    return FuturesDataService(
+        effective_database,
+        effective_crawler,
+        futures_intel_adapter=futures_intel_adapter,
+    )
+
+
+def _compact_futures_intel_report(item: dict) -> dict[str, object]:
+    return {
+        "report_id": item["id"],
+        "trade_date": item["trade_date"],
+        "title": item["title"],
+        "report_type": item["report_type"],
+        "symbols": item["symbols"],
+        "summary": item["summary"][:240],
+        "source": item["source"],
+        "updated_at": item["updated_at"],
+        "content_chars": item["content_chars"],
+    }
+
+
+def _compact_native_report(item: dict) -> dict[str, object]:
+    return {
+        "report_id": item["id"],
+        "trade_date": item["trade_date"],
+        "title": item["title"],
+        "report_type": item["report_type"],
+        "symbols": item["symbols"],
+        "summary": item["summary"][:240],
+        "source": item["source"],
+        "updated_at": item["updated_at"],
+        "content_chars": item["content_chars"],
+    }
 
 
 def _slice_text_by_token_budget(

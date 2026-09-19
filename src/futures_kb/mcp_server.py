@@ -29,8 +29,10 @@ def create_mcp_server(
             "crawler payloads, full news articles, or historical exports. Use "
             "manual_data_submit for user-provided daily metrics, market_run_crawler "
             "only for allowlisted crawler execution, and research_search only when "
-            "a focused news or policy lookup is needed. Past reports are never auto-loaded; "
-            "call report_list first and report_read only for a selected report."
+            "a focused news or policy lookup is needed. The service can use its native "
+            "database or FuturesIntelTool while keeping the same tool contract. Past reports "
+            "are never auto-loaded; call report_list first and report_read only for a "
+            "selected report."
         ),
     )
 
@@ -62,8 +64,8 @@ def create_mcp_server(
         name="market_run_crawler",
         title="Run allowlisted market crawler",
         description=(
-            "Run a crawler configured locally for one supported symbol and date. "
-            "Crawler output is imported into SQLite; only run status is returned."
+            "Run the configured native crawler or FuturesIntelTool refresh for one "
+            "supported symbol and date. Only run status is returned."
         ),
     )
     def market_run_crawler(source: str, trade_date: str) -> dict[str, Any]:
@@ -135,8 +137,8 @@ def create_mcp_server(
         name="research_search",
         title="Search research notes",
         description=(
-            "Search local news, announcements, and research notes. Returns at most "
-            "three short excerpts with citations."
+            "Search FuturesIntelTool or native news, announcements, and research notes. "
+            "Returns at most three short excerpts with citations."
         ),
     )
     def research_search(
