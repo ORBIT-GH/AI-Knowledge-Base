@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import secrets
-from pathlib import Path
 from typing import Annotated
 
 import uvicorn
@@ -17,19 +16,9 @@ from futures_kb.models import (
     ManualMetricInput,
     MarketBarInput,
     ResearchNoteInput,
-    manual_metric_record,
-    market_bar_record,
-    research_note_record,
 )
-from futures_kb.reporting import build_daily_report_context
-from futures_kb.validation import (
-    finite_float,
-    normalize_symbol,
-    normalize_symbols,
-    optional_finite_float,
-    validate_metric_name,
-    validate_trade_date,
-)
+from futures_kb.service import FuturesDataService, create_service
+from futures_kb.validation import validate_trade_date
 
 
 def create_app(
@@ -37,14 +26,13 @@ def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
     crawler_runner: CrawlerRunner | None = None,
+    service: FuturesDataService | None = None,
 ) -> FastAPI:
     effective_settings = settings or Settings.from_env()
-    effective_database = database or Database(effective_settings.database_path)
-    effective_database.initialize()
-    effective_crawler = crawler_runner or CrawlerRunner(
-        effective_database,
-        config_path=effective_settings.crawler_config_path,
-        raw_data_dir=effective_settings.raw_data_dir,
+    effective_service = service or create_service(
+        settings=effective_settings,
+        database=database,
+        crawler_runner=crawler_runner,
     )
 
     app = FastAPI(
@@ -53,8 +41,8 @@ def create_app(
         description="External market data service for OpenClaw daily futures reports.",
     )
     app.state.settings = effective_settings
-    app.state.database = effective_database
-    app.state.crawler_runner = effective_crawler
+    app.state.database = effective_service.database
+    app.state.service = effective_service
 
     def authorize(
         x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
@@ -73,23 +61,20 @@ def create_app(
 
     @app.post("/api/v1/market/bars", dependencies=[Depends(authorize)])
     def upsert_market_bars(payload: list[MarketBarInput]) -> dict[str, int]:
-        records = [_validated_market_bar(item) for item in payload]
-        return {"upserted": effective_database.upsert_market_bars(records)}
+        return {"upserted": effective_service.upsert_market_bars(payload)}
 
     @app.post("/api/v1/manual-data", dependencies=[Depends(authorize)])
     def upsert_manual_data(payload: list[ManualMetricInput]) -> dict[str, int]:
-        records = [_validated_manual_metric(item) for item in payload]
-        return {"upserted": effective_database.upsert_manual_metrics(records)}
+        return {"upserted": effective_service.upsert_manual_metrics(payload)}
 
     @app.post("/api/v1/research", dependencies=[Depends(authorize)])
     def upsert_research(payload: list[ResearchNoteInput]) -> dict[str, int]:
-        records = [_validated_research_note(item) for item in payload]
-        return {"upserted": effective_database.upsert_research_notes(records)}
+        return {"upserted": effective_service.upsert_research_notes(payload)}
 
     @app.post("/api/v1/crawlers/{source}/run", dependencies=[Depends(authorize)])
     def run_crawler(source: str, trade_date: str = Query(...)) -> dict:
         try:
-            return effective_crawler.run(source, trade_date)
+            return effective_service.run_crawler(source, trade_date)
         except CrawlerConfigurationError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -99,55 +84,12 @@ def create_app(
         symbols: str | None = Query(default=None, description="Comma-separated symbols"),
     ) -> dict:
         selected = symbols.split(",") if symbols else None
-        return build_daily_report_context(
-            effective_database,
+        return effective_service.report_context(
             validate_trade_date(trade_date),
             symbols=selected,
         )
 
     return app
-
-
-def _validated_market_bar(payload: MarketBarInput) -> dict:
-    return {
-        "trade_date": validate_trade_date(payload.trade_date),
-        "symbol": normalize_symbol(payload.symbol),
-        "contract": payload.contract.strip() or "MAIN",
-        "open": optional_finite_float(payload.open, field="open"),
-        "high": optional_finite_float(payload.high, field="high"),
-        "low": optional_finite_float(payload.low, field="low"),
-        "close": finite_float(payload.close, field="close"),
-        "settlement": optional_finite_float(payload.settlement, field="settlement"),
-        "volume": optional_finite_float(payload.volume, field="volume"),
-        "open_interest": optional_finite_float(
-            payload.open_interest, field="open_interest"
-        ),
-        "source": payload.source.strip() or "api",
-        "is_main": payload.is_main,
-    }
-
-
-def _validated_manual_metric(payload: ManualMetricInput) -> dict:
-    return {
-        "trade_date": validate_trade_date(payload.trade_date),
-        "symbol": normalize_symbol(payload.symbol),
-        "metric": validate_metric_name(payload.metric),
-        "value": finite_float(payload.value, field="value"),
-        "unit": payload.unit.strip(),
-        "source": payload.source.strip() or "manual",
-        "confirmed": payload.confirmed,
-    }
-
-
-def _validated_research_note(payload: ResearchNoteInput) -> dict:
-    return {
-        "id": payload.id.strip(),
-        "title": payload.title.strip(),
-        "content": payload.content.strip(),
-        "source": payload.source.strip() or "manual",
-        "published_at": validate_trade_date(payload.published_at),
-        "symbols": list(dict.fromkeys(normalize_symbol(item) for item in payload.symbols)),
-    }
 
 
 def main() -> None:
@@ -159,9 +101,5 @@ def main() -> None:
     )
 
 
-app = create_app()
-
-
 if __name__ == "__main__":
     main()
-

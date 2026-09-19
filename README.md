@@ -31,5 +31,6 @@ uv run futures-kb-mcp
 
 - [架构说明](docs/01-architecture.md)
 - [程序流程](docs/02-program-flow.md)
-- [OpenClaw 接入](docs/03-openclaw-setup.md)
-- [数据格式](docs/04-data-contract.md)
+- [存储与特征](docs/03-storage-and-features.md)
+- [API 与爬虫](docs/04-api-and-crawler.md)
+- [MCP 与 OpenClaw 接入](docs/05-mcp-and-openclaw.md)
