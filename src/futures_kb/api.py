@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from futures_kb import __version__
 from futures_kb.config import Settings
 from futures_kb.crawler import CrawlerConfigurationError, CrawlerRunner
 from futures_kb.database import Database
@@ -38,7 +39,7 @@ def create_app(
 
     app = FastAPI(
         title="Futures AI Knowledge Base",
-        version="0.1.0",
+        version=__version__,
         description="External market data service for OpenClaw daily futures reports.",
     )
     app.state.settings = effective_settings
@@ -58,7 +59,7 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": __version__}
 
     @app.post("/api/v1/market/bars", dependencies=[Depends(authorize)])
     def upsert_market_bars(payload: list[MarketBarInput]) -> dict[str, int]:

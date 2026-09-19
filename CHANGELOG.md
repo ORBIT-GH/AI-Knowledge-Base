@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.0] - 2026-09-19
+
+### Added
+
+- FuturesIntelTool SQLite and report-directory compatibility adapter.
+- Read-only mapping for contract_master, futures_daily, positions, basis_history, spot_prices, coal_prices, news_items, and report_runs.
+- `futures-intel-source` skill for controlled refreshes and freshness checks.
+- `ai-knowledge-base` skill for compact context and on-demand report retrieval.
+- Merged report listing for FuturesIntelTool source reports and final OpenClaw reports.
+- FuturesIntelTool refresh invocation through the existing `market_run_crawler` MCP tool.
+- Compatibility documentation and synthetic integration tests.
+
+### Changed
+
+- `daily_report_context`, `research_search`, `report_list`, and `report_read` now route to FuturesIntelTool when `FUTURES_KB_BACKEND=futures-intel`.
+- Expanded supported symbols to include `M` for FuturesIntelTool compatibility.
+- MCP version now follows the package version.
+
 ## [0.1.0] - 2026-09-19
 
 ### Added

@@ -7,6 +7,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+from futures_kb import __version__
 from futures_kb.config import Settings
 from futures_kb.crawler import CrawlerConfigurationError
 from futures_kb.models import ManualMetricInput, ReportInput
@@ -22,7 +23,7 @@ def create_mcp_server(
     server = MCPServer(
         name="futures-kb",
         title="Futures AI Knowledge Base",
-        version="0.1.0",
+        version=__version__,
         instructions=(
             "External data boundary for OpenClaw. Use daily_report_context as the "
             "only market data source for the daily report. Do not request raw bars, "
