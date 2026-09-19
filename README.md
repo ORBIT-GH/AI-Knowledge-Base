@@ -1,9 +1,9 @@
 # Futures AI KB
 
-> 一个面向 OpenClaw 的期货数据与往期报告 MCP 服务。  
+> 一个面向 OpenClaw 的期货数据与往期报告 MCP 服务。
 > 将烧碱、PVC、焦煤行情、手工数据、资讯和报告保存在模型上下文之外，由 AI 按需调用。
 
-当前版本：`v0.1.0` MVP  
+当前版本：`v0.1.0` MVP
 适用品种：烧碱 `SH`、PVC `V`、焦煤 `JM`
 
 [English Summary](#english-summary)
@@ -167,7 +167,7 @@ skills/futures-daily-report/SKILL.md
 9. 根据 next_offset 决定是否需要继续读取
 ```
 
-`daily_report_context` 不返回往期报告正文。  
+`daily_report_context` 不返回往期报告正文。
 只有 `report_read` 会按需返回指定报告，默认单次最多 2,000 token。
 
 ## HTTP API
