@@ -37,6 +37,9 @@ def test_mcp_stdio_transport_discovers_and_calls_tools(tmp_path: Path) -> None:
                     "manual_data_submit",
                     "market_run_crawler",
                     "research_search",
+                    "report_save",
+                    "report_list",
+                    "report_read",
                 }
 
                 result = await session.call_tool(
@@ -50,5 +53,42 @@ def test_mcp_stdio_transport_discovers_and_calls_tools(tmp_path: Path) -> None:
                     payload = json.loads(result.content[0].text)
                 assert payload["data_quality"]["status"] == "complete"
                 assert payload["token_estimate"] < 3000
+
+                save_result = await session.call_tool(
+                    "report_save",
+                    {
+                        "payload": {
+                            "trade_date": "2026-09-19",
+                            "title": "2026-09-19 期货日报",
+                            "content": "PAST_REPORT_CONTENT",
+                            "symbols": ["SH", "V", "JM"],
+                            "summary": "往期日报摘要",
+                        }
+                    },
+                )
+                saved = getattr(save_result, "structured_content", None) or getattr(
+                    save_result, "structuredContent", None
+                )
+                if not saved:
+                    saved = json.loads(save_result.content[0].text)
+
+                list_result = await session.call_tool("report_list", {})
+                listed = getattr(list_result, "structured_content", None) or getattr(
+                    list_result, "structuredContent", None
+                )
+                if not listed:
+                    listed = json.loads(list_result.content[0].text)
+                assert "PAST_REPORT_CONTENT" not in json.dumps(listed)
+
+                read_result = await session.call_tool(
+                    "report_read",
+                    {"report_id": saved["report_id"], "max_tokens": 2000},
+                )
+                report = getattr(read_result, "structured_content", None) or getattr(
+                    read_result, "structuredContent", None
+                )
+                if not report:
+                    report = json.loads(read_result.content[0].text)
+                assert report["content"] == "PAST_REPORT_CONTENT"
 
     asyncio.run(exercise())

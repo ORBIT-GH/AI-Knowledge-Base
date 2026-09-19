@@ -24,7 +24,7 @@ openclaw mcp add futures-kb `
   --arg '-m' `
   --arg 'futures_kb.mcp_server' `
   --cwd $repo `
-  --include 'daily_report_context,manual_data_submit,market_run_crawler,research_search'
+  --include 'daily_report_context,manual_data_submit,market_run_crawler,research_search,report_save,report_list,report_read'
 
 openclaw mcp doctor futures-kb --probe
 ```
@@ -68,6 +68,18 @@ http://127.0.0.1:8790/mcp
 
 只允许 `SH`、`V`、`JM`。命令来自 `config/crawlers.local.json`，OpenClaw 不能提交命令行。
 
+### report_save
+
+保存 OpenClaw 已完成的报告。相同日期、类型、标题和来源重复保存时更新原记录，不自动放入任何对话上下文。
+
+### report_list
+
+只返回往期报告目录和短摘要，不返回正文。AI 在需要历史比较时先调用此工具。
+
+### report_read
+
+读取一个选中的 `report_id`。默认最多 2,000 token，正文过长时返回 `truncated` 和 `next_offset`。只有用户明确要求看历史报告或对比时调用。
+
 ### research_search
 
 最多返回三条短摘要。完整文章继续保存在 SQLite。
@@ -88,7 +100,7 @@ http://127.0.0.1:8790/mcp
 
 ```powershell
 openclaw automations create "10 16 * * 1-5" `
-  "使用 futures-daily-report Skill，生成今天的烧碱、PVC、焦煤期货日报。先调用 daily_report_context，只使用返回的数据，不需要完整历史行情。最后按 Skill 模板输出。" `
+  "使用 futures-daily-report Skill，生成今天的烧碱、PVC、焦煤期货日报。先调用 daily_report_context，只使用返回的数据，不需要完整历史行情。最后按 Skill 模板输出，并调用 report_save 保存报告。" `
   --name "期货日报" `
   --tz "Asia/Shanghai" `
   --session isolated `
@@ -104,6 +116,7 @@ openclaw automations create "10 16 * * 1-5" `
 ```text
 daily_report_context 返回的数据包
 + research_search 的少量摘要
++ 用户要求查看历史时，report_list 的目录和 report_read 的选中报告
 + 最终报告
 ```
 
@@ -116,4 +129,5 @@ daily_report_context 返回的数据包
 向量
 数据库记录
 手工数据的完整表
+未被调用的往期报告正文
 ```

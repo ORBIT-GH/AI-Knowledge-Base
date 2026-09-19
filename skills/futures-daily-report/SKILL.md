@@ -17,6 +17,15 @@ Use the `futures-kb` MCP server as the external data boundary.
 6. Use `manual_data_submit` only when the user explicitly provides structured daily data.
 7. Use `market_run_crawler` only when the user explicitly asks to refresh data.
 
+## Past report retrieval
+
+- After the final report is complete, call `report_save`.
+- Do not automatically call `report_read` for a normal daily report.
+- If the user asks for historical comparison, call `report_list` first.
+- Read only the selected `report_id` with `report_read`.
+- If `report_read` returns `truncated: true`, continue with `next_offset` only when needed.
+- Never load all past reports into context.
+
 ## Report rules
 
 - Write in Chinese.

@@ -44,6 +44,9 @@ def test_mcp_exposes_only_the_first_version_tools(tmp_path: Path) -> None:
         "manual_data_submit",
         "market_run_crawler",
         "research_search",
+        "report_save",
+        "report_list",
+        "report_read",
     }
 
 
@@ -119,3 +122,41 @@ def test_mcp_research_results_do_not_include_full_article(tmp_path: Path) -> Non
     assert payload["results"][0]["id"] == "note-1"
     assert len(payload["results"][0]["excerpt"]) <= 181
     assert "全文内容全文内容" * 100 not in json.dumps(payload, ensure_ascii=False)
+
+def test_mcp_report_tools_keep_content_out_of_list(tmp_path: Path) -> None:
+    server, _ = build_server(tmp_path)
+    save_result = asyncio.run(
+        server.call_tool(
+            "report_save",
+            {
+                "payload": {
+                    "trade_date": "2026-09-19",
+                    "title": "2026-09-19 期货日报",
+                    "content": "SHOULD_ONLY_BE_READ_ON_DEMAND",
+                    "symbols": ["SH", "V", "JM"],
+                    "summary": "三品种日报摘要",
+                }
+            },
+        )
+    )
+    saved = tool_payload(save_result)
+    assert saved["saved"] is True
+
+    list_result = asyncio.run(
+        server.call_tool(
+            "report_list",
+            {"date_from": "2026-09-19", "date_to": "2026-09-19"},
+        )
+    )
+    listing = tool_payload(list_result)
+    assert listing["reports"][0]["report_id"] == saved["report_id"]
+    assert "SHOULD_ONLY_BE_READ_ON_DEMAND" not in json.dumps(listing)
+
+    read_result = asyncio.run(
+        server.call_tool(
+            "report_read",
+            {"report_id": saved["report_id"], "max_tokens": 2000},
+        )
+    )
+    report = tool_payload(read_result)
+    assert report["content"] == "SHOULD_ONLY_BE_READ_ON_DEMAND"

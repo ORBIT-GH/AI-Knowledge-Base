@@ -9,7 +9,7 @@ from mcp.server.mcpserver import MCPServer
 
 from futures_kb.config import Settings
 from futures_kb.crawler import CrawlerConfigurationError
-from futures_kb.models import ManualMetricInput
+from futures_kb.models import ManualMetricInput, ReportInput
 from futures_kb.service import FuturesDataService, create_service
 
 
@@ -29,7 +29,8 @@ def create_mcp_server(
             "crawler payloads, full news articles, or historical exports. Use "
             "manual_data_submit for user-provided daily metrics, market_run_crawler "
             "only for allowlisted crawler execution, and research_search only when "
-            "a focused news or policy lookup is needed."
+            "a focused news or policy lookup is needed. Past reports are never auto-loaded; "
+            "call report_list first and report_read only for a selected report."
         ),
     )
 
@@ -76,6 +77,59 @@ def create_mcp_server(
                 "imported_bars": 0,
                 "error": str(exc),
             }
+
+    @server.tool(
+        name="report_save",
+        title="Save generated report",
+        description=(
+            "Persist a completed report outside model context. Re-saving the same "
+            "date, type, title, and source updates the existing report."
+        ),
+    )
+    def report_save(payload: ReportInput) -> dict[str, object]:
+        return effective_service.save_report(payload)
+
+    @server.tool(
+        name="report_list",
+        title="List past reports",
+        description=(
+            "Return compact report metadata and short summaries only. Use this "
+            "before reading any past report; full report content is never returned."
+        ),
+    )
+    def report_list(
+        query: str | None = None,
+        symbols: list[str] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 5,
+    ) -> dict[str, object]:
+        return effective_service.list_reports(
+            query=query,
+            symbols=symbols,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+
+    @server.tool(
+        name="report_read",
+        title="Read selected past report",
+        description=(
+            "Read one selected report with a token budget. Use next_offset to "
+            "continue only when necessary."
+        ),
+    )
+    def report_read(
+        report_id: str,
+        offset: int = 0,
+        max_tokens: int = 2000,
+    ) -> dict[str, object]:
+        return effective_service.read_report(
+            report_id,
+            offset=offset,
+            max_tokens=max_tokens,
+        )
 
     @server.tool(
         name="research_search",
