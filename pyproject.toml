@@ -1,0 +1,34 @@
+[project]
+name = "futures-ai-kb"
+version = "0.1.0"
+description = "External futures data service and MCP tools for OpenClaw daily reports"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.141,<0.142",
+  "mcp>=2.2,<3",
+  "uvicorn>=0.53,<0.54",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<0.29",
+  "pytest>=8.4,<9",
+]
+
+[project.scripts]
+futures-kb-api = "futures_kb.api:main"
+futures-kb-mcp = "futures_kb.mcp_server:main"
+futures-kb-seed = "futures_kb.seed:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/futures_kb"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]
+testpaths = ["tests"]
