@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +21,27 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Build distributions
+      - name: Build Python distributions
         run: |
           python -m pip install --upgrade pip build
           python -m build
 
-      - name: Build source archive
+      - name: Build Windows desktop executable
         run: |
-          git archive --format=zip --output="dist/futures-ai-kb-${GITHUB_REF_NAME}-source.zip" HEAD
+          python -m pip install ".[desktop]"
+          pyinstaller --noconfirm --clean --onefile --windowed --name AIKnowledgeBase --distpath dist/desktop --workpath build/desktop --specpath build/desktop src/futures_kb/desktop.py
+
+      - name: Build source archive
+        shell: pwsh
+        run: |
+          git archive --format=zip --output="dist/futures-ai-kb-$env:GITHUB_REF_NAME-source.zip" HEAD
 
       - name: Create GitHub release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/* \
-            --title "Futures AI KB ${GITHUB_REF_NAME}" \
-            --generate-notes
+          $assets = @()
+          $assets += Get-ChildItem -Path dist -File | ForEach-Object { $_.FullName }
+          $assets += (Resolve-Path "dist/desktop/AIKnowledgeBase.exe").Path
+          gh release create $env:GITHUB_REF_NAME @assets --title "Futures AI KB $env:GITHUB_REF_NAME" --generate-notes

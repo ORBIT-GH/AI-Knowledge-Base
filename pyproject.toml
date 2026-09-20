@@ -1,6 +1,6 @@
 [project]
 name = "futures-ai-kb"
-version = "0.2.4"
+version = "0.2.5"
 description = "External futures data and on-demand report service for OpenClaw"
 readme = "README.md"
 license = "MIT"
@@ -30,11 +30,15 @@ dev = [
   "httpx>=0.28,<0.29",
   "pytest>=8.4,<9",
 ]
+desktop = [
+  "pyinstaller>=6.15,<7",
+]
 
 [project.scripts]
 futures-kb-api = "futures_kb.api:main"
 futures-kb-mcp = "futures_kb.mcp_server:main"
 futures-kb-seed = "futures_kb.seed:main"
+futures-kb-desktop = "futures_kb.desktop:main"
 
 [build-system]
 requires = ["hatchling"]

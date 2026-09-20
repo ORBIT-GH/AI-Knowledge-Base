@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.5] - 2026-09-20
+
+### Added
+
+- Native Tkinter desktop window for Windows.
+- Contract management tab with fixed-contract and automatic-main actions.
+- Daily context viewer tab.
+- On-demand past report browser tab.
+- `futures-kb-desktop` console entry point.
+- PyInstaller build script producing `AIKnowledgeBase.exe`.
+- Automatic FuturesIntelTool backend detection for the desktop executable.
+
 ## [0.2.4] - 2026-09-20
 
 ### Fixed
