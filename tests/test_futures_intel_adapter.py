@@ -403,9 +403,66 @@ def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
     )
     service = create_service(settings=settings)
 
+    service.database.upsert_manual_metrics(
+        [
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "raw_salt_price",
+                "value": 260,
+                "unit": "元/吨",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "electricity_price",
+                "value": 0.55,
+                "unit": "元/度",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "liquid_chlorine_price",
+                "value": 120,
+                "unit": "元/吨",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "intraday_volume_ratio",
+                "value": 1.8,
+                "unit": "x",
+                "source": "manual",
+            },
+        ]
+    )
+    service.database.upsert_research_notes(
+        [
+            {
+                "id": "native-news-1",
+                "title": "人工补充新闻",
+                "content": "人工确认的氯碱装置动态。",
+                "source": "manual",
+                "published_at": "2026-09-10",
+                "symbols": ["SH"],
+            }
+        ]
+    )
+
     packet = service.report_context("2026-09-10", symbols=["SH"])
     assert packet["source"] == "FuturesIntelTool"
     assert packet["symbols"]["SH"]["metrics"]["contract"] == "SH2611"
+    assert packet["symbols"]["SH"]["manual_metrics"]["supplemental"][
+        "raw_salt_price"
+    ]["value"] == 260
+    assert packet["data_quality"]["analysis_capabilities"]["intraday_volume_5m"][
+        "available"
+    ] is True
+    assert "SH:raw_salt_price" not in packet["data_quality"]["missing_sections"]
+    assert "native-news-1" in {item["id"] for item in packet["news"]}
 
     listing = service.list_reports(
         date_from="2026-09-10",
@@ -418,4 +475,3 @@ def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
 
     news = service.search_research("检修", symbols=["SH"], limit=3)
     assert news["results"][0]["id"] == "news-1"
-

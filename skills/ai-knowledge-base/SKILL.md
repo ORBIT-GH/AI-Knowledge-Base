@@ -14,6 +14,18 @@ Use the `futures-kb` MCP server as the only market-data boundary.
 - Use `research_search` only when the compact news excerpts are insufficient.
 - Never request full database tables, raw crawler output, or complete articles.
 
+## Supplemental Daily Data
+
+Use `manual_data_submit` for data that FuturesIntelTool does not collect.
+
+- For 5-minute volume, submit `intraday_volume_ratio`, `volume_ratio_5m`, or `volume_5m_ratio`.
+- For SH valuation, submit `raw_salt_price`, `electricity_price`, and `liquid_chlorine_price`.
+- For V valuation, submit `calcium_carbide_price` and `ethylene_price`.
+- For JM structure, submit `premium_discount_structure`.
+- Import manually verified news through the local AI-KB research endpoint or database.
+
+The compatible daily packet merges these values and removes the corresponding missing-section flags.
+
 ## Report Storage
 
 - After the final report is complete, call `report_save`.

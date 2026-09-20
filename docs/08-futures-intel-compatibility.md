@@ -127,3 +127,15 @@ E:\资讯爬虫\scripts\run_daily.ps1
 ```
 
 日报 Automation 已延迟到 18:25，避免和 18:05 的采集任务竞争。
+
+## 手工补充数据
+
+兼容模式会把 AI-Knowledge-Base 本地手工数据合并到日报包：
+
+- `intraday_volume_ratio`、`volume_ratio_5m` 或 `volume_5m_ratio`：补充量能字段。
+- SH：`raw_salt_price`、`electricity_price`、`liquid_chlorine_price`。
+- V：`calcium_carbide_price`、`ethylene_price`。
+- JM：`premium_discount_structure`。
+- 本地导入的新闻会合并到 `news`，并保留来源。
+
+有补充值时，对应 `missing_sections` 会移除，`analysis_capabilities` 会标记为可用。

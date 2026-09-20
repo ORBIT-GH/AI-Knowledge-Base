@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.2] - 2026-09-20
+
+### Added
+
+- Merge AI-KB native manual metrics into FuturesIntelTool-compatible daily packets.
+- Support supplemental `intraday_volume_ratio` as the source for the 5-minute volume section.
+- Support supplemental SH valuation fields: raw salt, electricity, and liquid chlorine prices.
+- Support supplemental PVC valuation fields: calcium carbide and ethylene prices.
+- Support supplemental JM premium/discount structure inputs.
+- Merge locally imported news from AI-KB into the compatible daily packet.
+- Mark missing report sections as complete when corresponding supplemental data is supplied.
+
 ## [0.2.1] - 2026-09-20
 
 ### Fixed

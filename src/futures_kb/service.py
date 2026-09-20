@@ -58,15 +58,129 @@ class FuturesDataService:
         normalized_date = validate_trade_date(trade_date)
         normalized_symbols = list(normalize_symbols(symbols)) if symbols else None
         if self.futures_intel_adapter is not None:
-            return self.futures_intel_adapter.build_daily_report_context(
+            packet = self.futures_intel_adapter.build_daily_report_context(
                 normalized_date,
                 symbols=normalized_symbols,
+            )
+            return self._merge_native_supplements(
+                packet,
+                normalized_date,
+                normalized_symbols,
             )
         return build_daily_report_context(
             self.database,
             normalized_date,
             symbols=normalized_symbols,
         )
+
+    def _merge_native_supplements(
+        self,
+        packet: dict,
+        trade_date: str,
+        symbols: list[str] | None,
+    ) -> dict:
+        market = packet.get("symbols", {})
+        selected = list(symbols or market.keys())
+        supplemental_by_symbol: dict[str, dict[str, dict]] = {}
+        for symbol in selected:
+            if symbol not in market:
+                continue
+            metrics = self.database.get_manual_metrics(symbol, trade_date, limit=50)
+            supplemental = {
+                name: {
+                    "value": record.get("value"),
+                    "unit": record.get("unit", ""),
+                    "date": record.get("trade_date"),
+                    "source": record.get("source", "manual"),
+                }
+                for name, record in metrics.items()
+            }
+            if supplemental:
+                supplemental_by_symbol[symbol] = supplemental
+                market[symbol].setdefault("manual_metrics", {})[
+                    "supplemental"
+                ] = supplemental
+
+        native_news = self.database.get_recent_research(
+            selected,
+            trade_date,
+            days=7,
+            limit=3,
+        )
+        if native_news:
+            existing = {
+                str(item.get("id"))
+                for item in packet.get("news", [])
+                if isinstance(item, dict)
+            }
+            for item in native_news:
+                item_id = str(item.get("id"))
+                if item_id in existing:
+                    continue
+                content = str(item.get("content") or "").strip().replace("\n", " ")
+                excerpt = content[:180]
+                if len(content) > 180:
+                    excerpt += "…"
+                packet.setdefault("news", []).append(
+                    {
+                        "id": item_id,
+                        "title": item.get("title", ""),
+                        "excerpt": excerpt,
+                        "source": item.get("source", "native"),
+                        "published_at": item.get("published_at"),
+                        "symbols": item.get("symbols", []),
+                    }
+                )
+            packet["news"] = packet["news"][:3]
+
+        quality = packet.setdefault("data_quality", {})
+        missing_sections = list(quality.get("missing_sections", []))
+        capabilities = quality.setdefault("analysis_capabilities", {})
+        valuation = capabilities.setdefault("valuation_inputs", {})
+        expected = {
+            "SH": {"raw_salt_price", "electricity_price", "liquid_chlorine_price"},
+            "V": {"calcium_carbide_price", "ethylene_price"},
+            "JM": {"premium_discount_structure"},
+        }
+        all_supplemental = {
+            metric
+            for metrics in supplemental_by_symbol.values()
+            for metric in metrics
+        }
+        if all_supplemental.intersection(
+            {"intraday_volume_ratio", "volume_ratio_5m", "volume_5m_ratio"}
+        ):
+            missing_sections = [
+                item for item in missing_sections if item != "intraday_volume_5m"
+            ]
+            capabilities["intraday_volume_5m"] = {
+                "available": True,
+                "source": "native_manual_data",
+            }
+        if packet.get("news"):
+            missing_sections = [item for item in missing_sections if item != "news"]
+            quality["news_status"] = "native_supplemental"
+        for symbol, required in expected.items():
+            supplied = set(supplemental_by_symbol.get(symbol, {}))
+            missing = sorted(required - supplied)
+            if missing:
+                valuation[symbol] = missing
+            else:
+                valuation.pop(symbol, None)
+            missing_sections = [
+                item
+                for item in missing_sections
+                if not (item.startswith(f"{symbol}:") and item.split(":", 1)[1] in required)
+            ]
+        quality["missing_sections"] = sorted(set(missing_sections))
+        if not quality.get("missing_market_data") and not quality["missing_sections"]:
+            quality["status"] = "complete"
+        elif quality.get("missing_sections"):
+            quality["status"] = "partial"
+        packet["token_estimate"] = estimate_tokens(
+            {key: value for key, value in packet.items() if key != "token_estimate"}
+        )
+        return packet
 
     def submit_manual_metrics(
         self, records: Iterable[ManualMetricInput]
