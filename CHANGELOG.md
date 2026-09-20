@@ -2,6 +2,15 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.6] - 2026-09-20
+
+### Added
+
+- New AI Knowledge application icon with book, knowledge network, and futures trend elements.
+- Multi-size ICO resource for Windows Explorer, taskbar, title bar, and executable.
+- Reproducible Pillow-based icon generation script.
+- PyInstaller and GitHub Release workflows now embed the icon.
+
 ## [0.2.5] - 2026-09-20
 
 ### Added

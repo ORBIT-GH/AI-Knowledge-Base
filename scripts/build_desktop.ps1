@@ -24,6 +24,8 @@ try {
         --onefile `
         --windowed `
         --name AIKnowledgeBase `
+        --icon (Join-Path $Repo "src\futures_kb\resources\ai-knowledge.ico") `
+        --add-data (Join-Path $Repo "src\futures_kb\resources\ai-knowledge.ico");futures_kb\resources `
         --distpath $Dist `
         --workpath $Work `
         --specpath $Spec `

@@ -29,7 +29,7 @@ jobs:
       - name: Build Windows desktop executable
         run: |
           python -m pip install ".[desktop]"
-          pyinstaller --noconfirm --clean --onefile --windowed --name AIKnowledgeBase --distpath dist/desktop --workpath build/desktop --specpath build/desktop src/futures_kb/desktop.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name AIKnowledgeBase --icon src/futures_kb/resources/ai-knowledge.ico --add-data "src/futures_kb/resources/ai-knowledge.ico;futures_kb/resources" --distpath dist/desktop --workpath build/desktop --specpath build/desktop src/futures_kb/desktop.py
 
       - name: Build source archive
         shell: pwsh

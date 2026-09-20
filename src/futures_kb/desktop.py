@@ -20,7 +20,7 @@ class DesktopApp:
 
     def __init__(self, root: Tk, service: FuturesDataService | None = None) -> None:
         self.root = root
-        self.root.title("AI Knowledge Base 控制台")
+        self.root.title("AI Knowledge 控制台")
         self.root.geometry("1120x760")
         self.root.minsize(920, 620)
         self.service = service or create_service(settings=default_settings())
@@ -303,6 +303,10 @@ def default_settings() -> Settings:
 
 def main() -> None:
     root = Tk()
+    root.title("AI Knowledge")
+    icon_path = Path(__file__).with_name("resources") / "ai-knowledge.ico"
+    if icon_path.exists():
+        root.iconbitmap(default=str(icon_path))
     DesktopApp(root)
     root.mainloop()
 

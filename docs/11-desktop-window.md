@@ -51,3 +51,20 @@ EXE 启动时优先读取：
 ```
 
 如果环境变量已设置，优先使用环境变量。
+
+## 图标
+
+桌面程序图标位于：
+
+```text
+src\futures_kb\resources\ai-knowledge.ico
+```
+
+重新生成图标：
+
+```powershell
+uv sync --extra dev --extra desktop
+uv run python scripts\generate_icon.py
+```
+
+PyInstaller 构建时会把图标写入 EXE，并加载到窗口标题栏。
