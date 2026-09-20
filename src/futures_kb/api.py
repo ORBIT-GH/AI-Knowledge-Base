@@ -7,19 +7,21 @@ from typing import Annotated
 
 import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from futures_kb import __version__
 from futures_kb.config import Settings
 from futures_kb.crawler import CrawlerConfigurationError, CrawlerRunner
 from futures_kb.database import Database
 from futures_kb.models import (
+    ContractOverrideInput,
     ManualMetricInput,
     MarketBarInput,
     ReportInput,
     ResearchNoteInput,
 )
 from futures_kb.service import FuturesDataService, create_service
+from futures_kb.ui import render_ui
 from futures_kb.validation import validate_trade_date
 
 
@@ -111,6 +113,25 @@ def create_app(
             return effective_service.run_crawler(source, trade_date)
         except CrawlerConfigurationError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse(url="/ui")
+
+    @app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+    def control_ui() -> HTMLResponse:
+        return HTMLResponse(render_ui())
+
+    @app.get("/api/v1/contracts", dependencies=[Depends(authorize)])
+    def contract_overview() -> dict:
+        return effective_service.contract_overview()
+
+    @app.put("/api/v1/contracts/{symbol}", dependencies=[Depends(authorize)])
+    def set_contract_override(
+        symbol: str,
+        payload: ContractOverrideInput,
+    ) -> dict:
+        return effective_service.set_contract_override(symbol, payload.contract)
 
     @app.get("/api/v1/report-context", dependencies=[Depends(authorize)])
     def report_context(

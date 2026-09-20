@@ -59,6 +59,12 @@ class ReportInput(BaseModel):
     source: str = Field(default="openclaw", max_length=200)
 
 
+class ContractOverrideInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract: str | None = None
+
+
 def market_bar_record(payload: MarketBarInput) -> dict[str, Any]:
     return payload.model_dump()
 

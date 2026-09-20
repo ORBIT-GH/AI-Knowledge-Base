@@ -314,6 +314,20 @@ class FuturesDataService:
             "total_token_estimate": estimate_tokens(report["content"]),
         }
 
+    def contract_overview(self) -> dict:
+        if self.futures_intel_adapter is None:
+            raise ValueError("contract management requires futures-intel backend")
+        return self.futures_intel_adapter.contract_overview()
+
+    def set_contract_override(
+        self,
+        symbol: str,
+        contract: str | None,
+    ) -> dict:
+        if self.futures_intel_adapter is None:
+            raise ValueError("contract management requires futures-intel backend")
+        return self.futures_intel_adapter.set_contract_override(symbol, contract)
+
     def run_crawler(self, source: str, trade_date: str) -> dict:
         normalized_symbol = normalize_symbol(source)
         normalized_date = validate_trade_date(trade_date)

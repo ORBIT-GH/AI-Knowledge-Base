@@ -2,6 +2,17 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.3] - 2026-09-20
+
+### Added
+
+- Dependency-free web control panel at `/ui`.
+- Contract overview with actual main contract and configured override.
+- Contract selection from FuturesIntelTool's latest `contract_master` records.
+- Contract override save and automatic-main-contract reset.
+- Contract management API endpoints.
+- Web UI refresh button for triggering FuturesIntelTool collection.
+
 ## [0.2.2] - 2026-09-20
 
 ### Added

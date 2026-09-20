@@ -3,7 +3,7 @@
 > 一个面向 OpenClaw 的期货数据与往期报告 MCP 服务。
 > 将烧碱、PVC、焦煤行情、手工数据、资讯和报告保存在模型上下文之外，由 AI 按需调用。
 
-当前版本：`v0.2.2` MVP
+当前版本：`v0.2.3` MVP
 适用品种：烧碱 `SH`、PVC `V`、焦煤 `JM`
 
 [English Summary](#english-summary)
@@ -274,6 +274,7 @@ tests/                单元、API、MCP 和 stdio 集成测试
 - [GitHub 发布流程](docs/07-github-release.md)
 - [FuturesIntelTool 兼容](docs/08-futures-intel-compatibility.md)
 - [Skill 流程](docs/09-skill-pipeline.md)
+- [合约管理与可视化控制台](docs/10-contract-management-ui.md)
 
 ## Roadmap
 

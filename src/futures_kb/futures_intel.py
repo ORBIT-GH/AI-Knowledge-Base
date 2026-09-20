@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -30,6 +31,7 @@ from futures_kb.validation import normalize_symbol, normalize_symbols, validate_
 
 SHANGHAI = timezone(timedelta(hours=8), name="Asia/Shanghai")
 SUPPORTED_REFRESH_MODES = {"collect", "report", "run", "scheduled-run"}
+CONTRACT_PATTERN = re.compile(r"^[A-Z]{1,3}\d{3,4}$")
 
 
 class FuturesIntelError(RuntimeError):
@@ -215,6 +217,121 @@ class FuturesIntelAdapter:
             if len(results) >= limit:
                 break
         return results
+
+    def contract_overview(self) -> dict[str, Any]:
+        config = self._read_config(self.config_path)
+        products = config.get("products") or [
+            {"code": symbol, "name": SYMBOL_NAMES.get(symbol, symbol)}
+            for symbol in DEFAULT_SYMBOLS
+        ]
+        items: list[dict[str, Any]] = []
+        for product in products:
+            if not isinstance(product, Mapping):
+                continue
+            symbol = str(product.get("code") or "").upper()
+            if not symbol:
+                continue
+            main = self._query(
+                """
+                SELECT trading_date, contract, exchange, open_interest, volume
+                FROM contract_master
+                WHERE product_code=? AND is_main=1
+                ORDER BY trading_date DESC LIMIT 1
+                """,
+                (symbol,),
+            )
+            available = self._available_contracts(symbol)
+            items.append(
+                {
+                    "symbol": symbol,
+                    "name": str(product.get("name") or SYMBOL_NAMES.get(symbol, symbol)),
+                    "exchange": str(product.get("exchange") or ""),
+                    "override_contract": product.get("contract_override") or None,
+                    "main_contract": main[0]["contract"] if main else None,
+                    "main_contract_date": main[0]["trading_date"] if main else None,
+                    "available_contracts": available,
+                }
+            )
+        return {
+            "source": "FuturesIntelTool",
+            "config_path": str(self.config_path) if self.config_path else None,
+            "products": items,
+        }
+
+    def set_contract_override(
+        self,
+        symbol: str,
+        contract: str | None,
+    ) -> dict[str, Any]:
+        normalized_symbol = normalize_symbol(symbol)
+        if not self.config_path or not self.config_path.exists():
+            raise FuturesIntelError("FuturesIntelTool config not found")
+        normalized_contract = (contract or "").strip().upper()
+        if normalized_contract in {"", "AUTO", "AUTOMATIC"}:
+            normalized_contract = None
+        if normalized_contract and not CONTRACT_PATTERN.fullmatch(normalized_contract):
+            raise FuturesIntelError(f"invalid contract code: {contract}")
+
+        config = self._read_config(self.config_path)
+        products = config.get("products")
+        if not isinstance(products, list):
+            raise FuturesIntelError("FuturesIntelTool config products must be a list")
+        target = next(
+            (
+                product
+                for product in products
+                if isinstance(product, dict)
+                and str(product.get("code") or "").upper() == normalized_symbol
+            ),
+            None,
+        )
+        if target is None:
+            raise FuturesIntelError(f"product not found in config: {normalized_symbol}")
+        if normalized_contract:
+            target["contract_override"] = normalized_contract
+        else:
+            target.pop("contract_override", None)
+
+        temp_path = self.config_path.with_suffix(self.config_path.suffix + ".tmp")
+        temp_path.write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp_path, self.config_path)
+        self.config = config
+        overview = self.contract_overview()
+        product = next(
+            item for item in overview["products"] if item["symbol"] == normalized_symbol
+        )
+        return {
+            "updated": True,
+            "symbol": normalized_symbol,
+            "override_contract": normalized_contract,
+            "product": product,
+        }
+
+    def _available_contracts(self, symbol: str) -> list[dict[str, Any]]:
+        rows = self._query(
+            """
+            SELECT contract, exchange, open_interest, volume, is_main
+            FROM contract_master
+            WHERE product_code=?
+              AND trading_date=(SELECT MAX(trading_date) FROM contract_master WHERE product_code=?)
+            ORDER BY is_main DESC, open_interest DESC, contract
+            LIMIT 30
+            """,
+            (symbol, symbol),
+        )
+        return [
+            {
+                "contract": row["contract"],
+                "exchange": row["exchange"],
+                "open_interest": row["open_interest"],
+                "volume": row["volume"],
+                "is_main": bool(row["is_main"]),
+            }
+            for row in rows
+        ]
 
     def run_refresh(
         self,

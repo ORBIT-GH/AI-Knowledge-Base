@@ -5,6 +5,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from futures_kb.api import create_app
 from futures_kb.config import Settings
 from futures_kb.futures_intel import FuturesIntelAdapter
 from futures_kb.service import create_service
@@ -475,3 +478,42 @@ def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
 
     news = service.search_research("检修", symbols=["SH"], limit=3)
     assert news["results"][0]["id"] == "news-1"
+
+
+def test_contract_api_and_ui(tmp_path: Path) -> None:
+    root = build_futures_intel_fixture(tmp_path)
+    settings = Settings(
+        database_path=tmp_path / "native.sqlite3",
+        crawler_config_path=tmp_path / "crawlers.json",
+        raw_data_dir=tmp_path / "raw",
+        backend="futures-intel",
+        futures_intel_root=root,
+    )
+    client = TestClient(create_app(settings=settings))
+
+    ui = client.get("/ui")
+    assert ui.status_code == 200
+    assert "合约管理" in ui.text
+
+    overview = client.get("/api/v1/contracts")
+    assert overview.status_code == 200
+    sh = next(item for item in overview.json()["products"] if item["symbol"] == "SH")
+    assert sh["main_contract"] == "SH2611"
+
+    updated = client.put("/api/v1/contracts/SH", json={"contract": "SH2701"})
+    assert updated.status_code == 200
+    assert updated.json()["override_contract"] == "SH2701"
+    config = json.loads(
+        (root / "config" / "default.json").read_text(encoding="utf-8")
+    )
+    sh_config = next(item for item in config["products"] if item["code"] == "SH")
+    assert sh_config["contract_override"] == "SH2701"
+
+    automatic = client.put("/api/v1/contracts/SH", json={"contract": None})
+    assert automatic.status_code == 200
+    assert automatic.json()["override_contract"] is None
+    config = json.loads(
+        (root / "config" / "default.json").read_text(encoding="utf-8")
+    )
+    sh_config = next(item for item in config["products"] if item["code"] == "SH")
+    assert "contract_override" not in sh_config
