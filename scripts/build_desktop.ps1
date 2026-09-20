@@ -16,6 +16,8 @@ try {
     $Dist = Join-Path $Repo "dist\desktop"
     $Work = Join-Path $Repo "build\desktop"
     $Spec = Join-Path $Repo "build\desktop"
+    $Icon = Join-Path $Repo "src\futures_kb\resources\ai-knowledge.ico"
+    $IconData = "$Icon;futures_kb\resources"
     New-Item -ItemType Directory -Force $Dist, $Work, $Spec | Out-Null
 
     uv run pyinstaller `
@@ -24,8 +26,8 @@ try {
         --onefile `
         --windowed `
         --name AIKnowledgeBase `
-        --icon (Join-Path $Repo "src\futures_kb\resources\ai-knowledge.ico") `
-        --add-data (Join-Path $Repo "src\futures_kb\resources\ai-knowledge.ico");futures_kb\resources `
+        --icon $Icon `
+        "--add-data=$IconData" `
         --distpath $Dist `
         --workpath $Work `
         --specpath $Spec `
