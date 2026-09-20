@@ -51,6 +51,7 @@ class FuturesIntelAdapter:
         resolved_config = self._detect_config()
         self.config_path = resolved_config
         config = self._read_config(resolved_config)
+        self.config = config
         base = resolved_config.parent.parent if resolved_config else detected_root
 
         database_value = config.get("database", "data/market.sqlite")
@@ -80,6 +81,7 @@ class FuturesIntelAdapter:
             market[symbol] = self._product_context(symbol, normalized_date)
 
         news = self._recent_news(selected, normalized_date, limit=MAX_NEWS_ITEMS)
+        _apply_cross_product_warnings(market)
         packet: dict[str, Any] = {
             "trade_date": normalized_date,
             "generated_at": datetime.now(SHANGHAI).isoformat(timespec="seconds"),
@@ -87,7 +89,12 @@ class FuturesIntelAdapter:
             "symbols": market,
             "cross_market": _cross_market(market),
             "news": news,
-            "data_quality": self._data_quality(selected, normalized_date, market),
+            "data_quality": self._data_quality(
+                selected,
+                normalized_date,
+                market,
+                news,
+            ),
         }
         packet["token_estimate"] = estimate_tokens(packet)
         return packet
@@ -218,6 +225,23 @@ class FuturesIntelAdapter:
         normalized_date = validate_trade_date(trade_date)
         if mode not in SUPPORTED_REFRESH_MODES:
             raise FuturesIntelError(f"unsupported FuturesIntelTool mode: {mode}")
+
+        latest = self._latest_report_record()
+        if (
+            latest
+            and str(latest.get("trade_date")) == normalized_date
+            and str(latest.get("status") or "").lower() in {"success", "partial"}
+        ):
+            return {
+                "source": "FuturesIntelTool",
+                "trade_date": normalized_date,
+                "mode": mode,
+                "status": "success",
+                "skipped": True,
+                "reason": "source_report_is_fresh",
+                "report_dir": latest.get("report_dir"),
+                "anomaly_count": _report_anomaly_count(latest),
+            }
 
         base_command, environment = self._refresh_command()
         command = [
@@ -358,19 +382,45 @@ class FuturesIntelAdapter:
             (symbol, trade_date),
         )
         basis = dict(basis_rows[0]) if basis_rows else None
+        if basis and basis.get("basis_value") is not None:
+            history = self._query(
+                """
+                SELECT basis_value FROM basis_history
+                WHERE product_code=? AND quote_date<=? AND basis_value IS NOT NULL
+                ORDER BY quote_date
+                """,
+                (symbol, trade_date),
+            )
+            values = [float(row["basis_value"]) for row in history]
+            current = float(basis["basis_value"])
+            basis["percentile"] = (
+                sum(1 for value in values if value <= current) / len(values) * 100
+                if values
+                else None
+            )
+
+        position_rows = self._query(
+            """
+            SELECT trading_date, contract, member, side, rank, position, change, source
+            FROM positions
+            WHERE product_code=? AND trading_date<=? AND rank<=3
+            ORDER BY trading_date DESC, side, rank
+            LIMIT 30
+            """,
+            (symbol, trade_date),
+        )
+        latest_position_date = (
+            str(position_rows[0]["trading_date"]) if position_rows else None
+        )
         positions = [
             dict(row)
-            for row in self._query(
-                """
-                SELECT trading_date, contract, member, side, rank, position, change, source
-                FROM positions
-                WHERE product_code=? AND contract=? AND trading_date<=? AND rank<=3
-                ORDER BY trading_date DESC, side, rank
-                LIMIT 12
-                """,
-                (symbol, contract, trade_date),
-            )
-        ]
+            for row in position_rows
+            if latest_position_date is not None
+            and str(row["trading_date"]) == latest_position_date
+        ][:12]
+        position_contracts = sorted(
+            {str(item.get("contract")) for item in positions if item.get("contract")}
+        )
         spots = [
             dict(row)
             for row in self._query(
@@ -403,6 +453,14 @@ class FuturesIntelAdapter:
             anomalies.append("未找到基差数据")
         elif str(basis.get("contract")) != contract:
             anomalies.append("基差合约与报告主力合约不一致")
+        if not positions:
+            anomalies.append("未找到持仓明细")
+        elif contract not in position_contracts:
+            anomalies.append(
+                "持仓合约与报告主力不一致：持仓 "
+                + "、".join(position_contracts)
+                + f"，主力 {contract}"
+            )
         return {
             "name": SYMBOL_NAMES.get(symbol, symbol),
             "status": "ok",
@@ -410,6 +468,7 @@ class FuturesIntelAdapter:
             "manual_metrics": {
                 "basis": _compact_mapping(basis),
                 "positions": [_compact_mapping(item) for item in positions],
+                "positions_contract": position_contracts or None,
                 "spot_prices": [_compact_mapping(item) for item in spots],
                 "coal_prices": [_compact_mapping(item) for item in coal],
             },
@@ -450,12 +509,50 @@ class FuturesIntelAdapter:
         symbols: Sequence[str],
         trade_date: str,
         market: Mapping[str, Any],
+        news: Sequence[Mapping[str, Any]],
     ) -> dict[str, Any]:
         missing = [symbol for symbol, item in market.items() if item.get("status") != "ok"]
+        missing_sections: list[str] = []
+        valuation_missing: dict[str, list[str]] = {}
+        expected_valuation = {
+            "SH": ["raw_salt_price", "electricity_price", "liquid_chlorine_price"],
+            "V": ["calcium_carbide_price", "ethylene_price"],
+            "JM": ["basis_percentile", "premium_discount_structure"],
+        }
+        for symbol, item in market.items():
+            manual = item.get("manual_metrics", {}) if isinstance(item, Mapping) else {}
+            if not manual.get("positions"):
+                missing_sections.append(f"{symbol}:positions")
+            if not manual.get("basis"):
+                missing_sections.append(f"{symbol}:basis")
+            missing_valuation = list(expected_valuation.get(symbol, []))
+            basis = manual.get("basis")
+            if isinstance(basis, Mapping) and basis.get("percentile") is not None:
+                missing_valuation = [
+                    value for value in missing_valuation if value != "basis_percentile"
+                ]
+            if missing_valuation:
+                valuation_missing[symbol] = missing_valuation
+        if not news:
+            missing_sections.append("news")
+        missing_sections.append("intraday_volume_5m")
+        for symbol, values in valuation_missing.items():
+            missing_sections.extend(f"{symbol}:{value}" for value in values)
+
         latest = self._latest_report_record()
         return {
-            "status": "complete" if not missing else "partial",
+            "status": "complete" if not missing and not missing_sections else "partial",
             "missing_market_data": missing,
+            "missing_sections": sorted(set(missing_sections)),
+            "news_status": "ok" if news else "no_entries",
+            "news_source_configured": bool(self.config.get("rss_feeds")),
+            "analysis_capabilities": {
+                "intraday_volume_5m": {
+                    "available": False,
+                    "reason": "FuturesIntelTool schema version 1 has no 5-minute volume table",
+                },
+                "valuation_inputs": valuation_missing,
+            },
             "source": "FuturesIntelTool",
             "database": str(self.database_path),
             "reports_dir": str(self.reports_dir),
@@ -632,6 +729,49 @@ class FuturesIntelAdapter:
                 (name,),
             ).fetchone()
         return row is not None
+
+
+def _report_anomaly_count(record: Mapping[str, Any]) -> int:
+    report_dir = Path(str(record.get("report_dir") or ""))
+    path = report_dir / "anomalies.json"
+    if not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    items = payload.get("items") if isinstance(payload, Mapping) else None
+    return len(items) if isinstance(items, list) else 0
+
+
+def _apply_cross_product_warnings(market: Mapping[str, Any]) -> None:
+    values: dict[tuple[str, float], list[str]] = {}
+    for symbol, item in market.items():
+        if not isinstance(item, Mapping):
+            continue
+        manual = item.get("manual_metrics", {})
+        basis = manual.get("basis") if isinstance(manual, Mapping) else None
+        if not isinstance(basis, Mapping):
+            continue
+        spot = _number(basis.get("spot_price"))
+        quote_date = basis.get("quote_date")
+        if spot is None or not quote_date:
+            continue
+        values.setdefault((str(quote_date), float(spot)), []).append(symbol)
+
+    for (quote_date, spot), entries in values.items():
+        symbols = sorted(set(entries))
+        if len(symbols) < 2:
+            continue
+        warning = (
+            f"跨品种现货价同值告警：{quote_date} {spot:g} 元/吨同时出现于 "
+            + "、".join(symbols)
+            + "，疑似混用或口径错误，基差不得直接使用，需核实来源"
+        )
+        for symbol in symbols:
+            anomalies = market[symbol].setdefault("anomalies", [])
+            if warning not in anomalies:
+                anomalies.append(warning)
 
 
 def _resolve_under(base: Path, value: Any) -> Path:

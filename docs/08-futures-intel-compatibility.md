@@ -40,10 +40,10 @@ $env:FUTURES_INTEL_ROOT = "$env:LOCALAPPDATA\FuturesIntelTool"
 也可以指定配置文件：
 
 ```powershell
-$env:FUTURES_INTEL_CONFIG = "E:\咨询爬虫\config\default.json"
+$env:FUTURES_INTEL_CONFIG = "C:\Users\Administrator\AppData\Local\FuturesIntelTool\config\default.json"
 ```
 
-如果没有检测到 `futures-intel` 命令，但找到了源码目录：
+如果使用源码目录 `E:\资讯爬虫`，将 `FUTURES_INTEL_ROOT` 指向该目录，并保留 `FUTURES_INTEL_CONFIG` 指向用户数据目录。这样刷新命令可以使用源码，而行情数据库仍从用户目录读取。
 
 ```text
 <root>\src\futures_intel
@@ -98,3 +98,32 @@ fi_daily_YYYY-MM-DD
 - 数据库结构变化时需要更新适配器。
 - FuturesIntelTool 仓库目前没有 License；本项目只通过公开数据和 CLI 接口兼容，没有复制其源码。
 - 两个项目应作为独立进程部署，避免将采集器和 MCP 服务耦合在同一个进程中。
+
+## 数据质量缺口
+
+兼容层会显式返回：
+
+- `missing_sections`
+- `news_status`
+- `analysis_capabilities.intraday_volume_5m`
+- `analysis_capabilities.valuation_inputs`
+
+当不同品种的同日现货价完全相同时，会在相关品种的 `anomalies` 中加入跨品种同值告警。
+
+持仓明细按产品的最新持仓日期读取，不强制绑定报告主力合约。如果持仓合约与主力不一致，会保留明细并添加口径告警。
+
+## Windows 计划任务
+
+如果 `FuturesIntelDaily` 仍指向错误的 `E:\咨询爬虫`，使用管理员 PowerShell 执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fix_futures_intel_task.ps1
+```
+
+脚本会把 action 修正为：
+
+```text
+E:\资讯爬虫\scripts\run_daily.ps1
+```
+
+日报 Automation 已延迟到 18:25，避免和 18:05 的采集任务竞争。

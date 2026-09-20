@@ -253,6 +253,10 @@ def test_adapter_builds_compact_context_from_futures_intel_db(tmp_path: Path) ->
     assert packet["news"][0]["id"] == "news-1"
     assert packet["token_estimate"] < 3000
     assert "content" not in json.dumps(packet["symbols"]["SH"])
+    assert "intraday_volume_5m" in packet["data_quality"]["missing_sections"]
+    assert packet["data_quality"]["analysis_capabilities"]["intraday_volume_5m"][
+        "available"
+    ] is False
 
 
 def test_adapter_lists_and_reads_source_report_on_demand(tmp_path: Path) -> None:
@@ -297,11 +301,95 @@ def test_adapter_runs_configured_refresh_command(tmp_path: Path) -> None:
         command=(sys.executable, str(fake_cli)),
     )
 
-    result = adapter.run_refresh("2026-09-10", mode="run")
+    result = adapter.run_refresh("2026-09-11", mode="run")
     assert result["status"] == "success"
     assert result["source"] == "FuturesIntelTool"
     assert result["anomaly_count"] == 0
+    assert result.get("skipped") is not True
     assert "daily-brief" not in json.dumps(result)
+
+
+def test_adapter_skips_refresh_when_source_report_is_fresh(tmp_path: Path) -> None:
+    root = build_futures_intel_fixture(tmp_path)
+    adapter = FuturesIntelAdapter(
+        root=root,
+        command=("this-command-must-not-run",),
+    )
+
+    result = adapter.run_refresh("2026-09-10", mode="run")
+
+    assert result["status"] == "success"
+    assert result["skipped"] is True
+    assert result["reason"] == "source_report_is_fresh"
+
+
+def test_adapter_keeps_positions_when_contract_differs_and_flags_duplicate_spot(
+    tmp_path: Path,
+) -> None:
+    root = build_futures_intel_fixture(tmp_path)
+    database_path = root / "data" / "market.sqlite"
+    connection = sqlite3.connect(database_path)
+    stamp = "2026-09-10T18:05:00+08:00"
+    connection.execute(
+        """
+        INSERT INTO contract_master VALUES (
+            '2026-09-10', 'SH', 'SH2701', 'CZCE', 80000, 50000, 1, 1,
+            'override', ?
+        )
+        """,
+        (stamp,),
+    )
+    connection.execute(
+        """
+        INSERT INTO futures_daily VALUES (
+            '2026-09-10', 'SH', 'SH2701', 'CZCE', '1d', 'full', 1969, 2022,
+            1953, 2001, 2001, 1973, 467719, 234242, 'sina', ?
+        )
+        """,
+        (stamp,),
+    )
+    connection.execute(
+        """
+        INSERT INTO contract_master VALUES (
+            '2026-09-10', 'JM', 'JM2701', 'DCE', 457244, 1112876, 1, 1,
+            'v1_oi_then_volume', ?
+        )
+        """,
+        (stamp,),
+    )
+    connection.execute(
+        """
+        INSERT INTO futures_daily VALUES (
+            '2026-09-10', 'JM', 'JM2701', 'DCE', '1d', 'full', 1580, 1600,
+            1560, 1580, 1580, 1616, 1112876, 457244, 'sina', ?
+        )
+        """,
+        (stamp,),
+    )
+    connection.execute("UPDATE basis_history SET spot_price=1975, basis_value=90 WHERE product_code='SH'")
+    connection.execute(
+        """
+        INSERT INTO basis_history VALUES (
+            '2026-09-10', 'JM', 'JM2701', 'main_basis', 395, 1975, 1580,
+            'jiaoyifamen', ?
+        )
+        """,
+        (stamp,),
+    )
+    connection.commit()
+    connection.close()
+
+    adapter = FuturesIntelAdapter(root=root)
+    packet = adapter.build_daily_report_context(
+        "2026-09-10", symbols=["SH", "JM"]
+    )
+
+    sh = packet["symbols"]["SH"]
+    assert sh["manual_metrics"]["positions_contract"] == ["SH2611"]
+    assert sh["manual_metrics"]["positions"]
+    assert any("持仓合约与报告主力不一致" in item for item in sh["anomalies"])
+    assert any("跨品种现货价同值告警" in item for item in sh["anomalies"])
+    assert any("跨品种现货价同值告警" in item for item in packet["symbols"]["JM"]["anomalies"])
 
 
 def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:

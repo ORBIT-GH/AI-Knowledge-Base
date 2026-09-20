@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.1] - 2026-09-20
+
+### Fixed
+
+- Read FuturesIntelTool positions by product and latest position date instead of filtering only by the report main contract.
+- Preserve position details when the exchange top-20 contract differs from the report main contract and add a clear anomaly.
+- Detect identical spot prices across different products and block silent basis reuse.
+- Add basis percentile calculation for compatible products.
+- Declare missing report capabilities explicitly, including 5-minute volume, valuation inputs, news, basis, and positions.
+- Skip FuturesIntelTool refresh when a successful or partial source report for the same trading date already exists.
+- Add `tzdata` as a runtime dependency so FuturesIntelTool can execute inside the AI-KB environment on Windows.
+- Add an administrator script to repair the Windows scheduled task path from `E:\咨询爬虫` to `E:\资讯爬虫`.
+- Move the Xiaomaomao daily report automation from 18:05 to 18:25 to avoid racing the collector.
+
 ## [0.2.0] - 2026-09-19
 
 ### Added
