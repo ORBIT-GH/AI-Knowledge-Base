@@ -494,6 +494,8 @@ def test_contract_api_and_ui(tmp_path: Path) -> None:
     ui = client.get("/ui")
     assert ui.status_code == 200
     assert "合约管理" in ui.text
+    assert "apiKey" in ui.text
+    assert "prompt(" not in ui.text
 
     overview = client.get("/api/v1/contracts")
     assert overview.status_code == 200

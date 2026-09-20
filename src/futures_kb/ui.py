@@ -24,7 +24,8 @@ def render_ui() -> str:
     .card h2 { margin: 0 0 12px; font-size: 20px; }
     .metric { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid #eef2f7; }
     .metric:last-child { border-bottom: 0; }
-    select { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #cfd9e8; border-radius: 8px; background: white; }
+    select, input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #cfd9e8; border-radius: 8px; background: white; }
+    .api-key { max-width: 260px; }
     .actions { display: flex; gap: 8px; margin-top: 12px; }
     .status { padding: 10px 14px; border-radius: 8px; background: #eef5ff; color: #245a9f; }
     .error { background: #fff0f0; color: #a52323; }
@@ -37,6 +38,8 @@ def render_ui() -> str:
   <div class="toolbar">
     <button onclick="loadContracts()">刷新合约</button>
     <button class="secondary" onclick="refreshSource()">刷新数据源</button>
+    <input id="apiKey" class="api-key" type="password" placeholder="API Key（未设置可留空）" autocomplete="off">
+    <button class="secondary" onclick="saveApiKey()">保存 Key</button>
     <span id="status" class="status">正在加载...</span>
   </div>
   <section>
@@ -47,13 +50,15 @@ def render_ui() -> str:
 <script>
 const statusEl = document.getElementById('status');
 const contractsEl = document.getElementById('contracts');
+const apiKeyEl = document.getElementById('apiKey');
+apiKeyEl.value = sessionStorage.getItem('aiKbApiKey') || '';
 function apiKey() {
-  let key = sessionStorage.getItem('aiKbApiKey') || '';
-  if (!key) {
-    key = prompt('如果 API 设置了 FUTURES_KB_API_KEY，请输入；没有可直接留空。') || '';
-    sessionStorage.setItem('aiKbApiKey', key);
-  }
-  return key;
+  return apiKeyEl.value.trim();
+}
+function saveApiKey() {
+  sessionStorage.setItem('aiKbApiKey', apiKey());
+  statusEl.textContent = 'API Key 已保存到当前浏览器会话';
+  loadContracts();
 }
 function headers() {
   const value = { 'Content-Type': 'application/json' };

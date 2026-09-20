@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.4] - 2026-09-20
+
+### Fixed
+
+- Replace browser `prompt()` authentication with an inline API Key input compatible with the Codex in-app browser.
+- Persist the API Key only in browser session storage.
+- Add a UI regression test ensuring `prompt()` is not used.
+
 ## [0.2.3] - 2026-09-20
 
 ### Added
