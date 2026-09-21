@@ -406,6 +406,8 @@ def create_service(
             root=effective_settings.futures_intel_root,
             config_path=effective_settings.futures_intel_config,
             timeout_seconds=effective_settings.futures_intel_timeout_seconds,
+            fetch_5m=effective_settings.fetch_5m,
+            intraday_timeout_seconds=effective_settings.intraday_timeout_seconds,
         )
     return FuturesDataService(
         effective_database,

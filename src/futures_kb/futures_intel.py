@@ -14,7 +14,7 @@ import sqlite3
 import subprocess
 import sys
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
@@ -25,6 +25,7 @@ from futures_kb.constants import (
     MAX_NEWS_ITEMS,
     SYMBOL_NAMES,
 )
+from futures_kb.intraday import fetch_intraday_volume_5m
 from futures_kb.reporting import estimate_tokens
 from futures_kb.validation import normalize_symbol, normalize_symbols, validate_trade_date
 
@@ -46,6 +47,9 @@ class FuturesIntelAdapter:
     config_path: Path | None = None
     command: tuple[str, ...] | None = None
     timeout_seconds: int = 300
+    fetch_5m: bool = False
+    intraday_timeout_seconds: int = 10
+    _intraday_cache: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         detected_root = self._detect_root()
@@ -565,6 +569,35 @@ class FuturesIntelAdapter:
                 )
             ]
 
+        daily_snapshot = {
+            "trade_date": latest.get("trading_date"),
+            "contract": contract,
+            "open": _round(latest.get("open")),
+            "high": _round(latest.get("high")),
+            "low": _round(latest.get("low")),
+            "close": _round(latest.get("close")),
+            "settlement": _round(latest.get("settlement")),
+            "previous_settlement": _round(latest.get("previous_settlement")),
+            "amplitude_pct": _amplitude_pct(latest),
+            "volume": _round(latest.get("volume")),
+            "open_interest": _round(latest.get("open_interest")),
+            "source": latest.get("source"),
+        }
+        daily_bars_20d = [
+            {
+                "d": row["trading_date"],
+                "o": _round(row.get("open")),
+                "h": _round(row.get("high")),
+                "l": _round(row.get("low")),
+                "c": _round(row.get("close")),
+                "s": _round(row.get("settlement")),
+                "ps": _round(row.get("previous_settlement")),
+                "v": _round(row.get("volume")),
+                "oi": _round(row.get("open_interest")),
+            }
+            for row in map(dict, reversed(bar_rows))
+        ]
+
         anomalies: list[str] = []
         if not basis:
             anomalies.append("未找到基差数据")
@@ -581,6 +614,9 @@ class FuturesIntelAdapter:
         return {
             "name": SYMBOL_NAMES.get(symbol, symbol),
             "status": "ok",
+            "daily_snapshot": daily_snapshot,
+            "daily_bars_20d": daily_bars_20d,
+            "intraday_volume_5m": self._intraday_volume(contract, trade_date),
             "metrics": metrics,
             "manual_metrics": {
                 "basis": _compact_mapping(basis),
@@ -591,6 +627,23 @@ class FuturesIntelAdapter:
             },
             "anomalies": anomalies,
         }
+
+    def _intraday_volume(self, contract: str, trade_date: str) -> dict[str, Any]:
+        if not self.fetch_5m:
+            return {
+                "available": False,
+                "contract": contract,
+                "trade_date": trade_date,
+                "reason": "5-minute fetch is disabled",
+            }
+        key = (contract, trade_date)
+        if key not in self._intraday_cache:
+            self._intraday_cache[key] = fetch_intraday_volume_5m(
+                contract,
+                trade_date,
+                timeout_seconds=self.intraday_timeout_seconds,
+            )
+        return self._intraday_cache[key]
 
     def _recent_news(
         self,
@@ -652,7 +705,12 @@ class FuturesIntelAdapter:
                 valuation_missing[symbol] = missing_valuation
         if not news:
             missing_sections.append("news")
-        missing_sections.append("intraday_volume_5m")
+        intraday_available = {
+            symbol: bool(item.get("intraday_volume_5m", {}).get("available"))
+            for symbol, item in market.items()
+        }
+        if not intraday_available or not all(intraday_available.values()):
+            missing_sections.append("intraday_volume_5m")
         for symbol, values in valuation_missing.items():
             missing_sections.extend(f"{symbol}:{value}" for value in values)
 
@@ -665,8 +723,10 @@ class FuturesIntelAdapter:
             "news_source_configured": bool(self.config.get("rss_feeds")),
             "analysis_capabilities": {
                 "intraday_volume_5m": {
-                    "available": False,
-                    "reason": "FuturesIntelTool schema version 1 has no 5-minute volume table",
+                    "available": bool(intraday_available)
+                    and all(intraday_available.values()),
+                    "symbols": intraday_available,
+                    "source": "sina:getFewMinLine:5",
                 },
                 "valuation_inputs": valuation_missing,
             },
@@ -846,6 +906,15 @@ class FuturesIntelAdapter:
                 (name,),
             ).fetchone()
         return row is not None
+
+
+def _amplitude_pct(bar: Mapping[str, Any]) -> float | None:
+    high = _number(bar.get("high"))
+    low = _number(bar.get("low"))
+    baseline = _number(bar.get("previous_settlement")) or _number(bar.get("close"))
+    if high is None or low is None or baseline in (None, 0):
+        return None
+    return _round((high - low) / baseline * 100)
 
 
 def _report_anomaly_count(record: Mapping[str, Any]) -> int:

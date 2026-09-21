@@ -298,6 +298,7 @@ def default_settings() -> Settings:
         backend="futures-intel",
         futures_intel_root=source_root if source_root.exists() else local_root,
         futures_intel_config=config_path,
+        fetch_5m=True,
     )
 
 

@@ -2,6 +2,17 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.7] - 2026-09-21
+
+### Added
+
+- Per-symbol `daily_snapshot` with OHLC, settlement, previous settlement, volume, open interest, and amplitude.
+- Per-symbol `daily_bars_20d` with the latest 20 daily bars.
+- Structured `intraday_volume_5m` provider based on Sina 5-minute futures data.
+- Intraday volume ratio, latest-bar ratio, volume band, price-volume pair, notable bars, and recent 12 bars.
+- `FUTURES_KB_FETCH_5M` and `FUTURES_KB_5M_TIMEOUT_SECONDS` configuration.
+- Fallback behavior that marks 5-minute availability without failing the whole report.
+
 ## [0.2.6] - 2026-09-20
 
 ### Added

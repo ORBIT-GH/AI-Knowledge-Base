@@ -19,6 +19,8 @@ class Settings:
     futures_intel_root: Path | None = None
     futures_intel_config: Path | None = None
     futures_intel_timeout_seconds: int = 300
+    fetch_5m: bool = False
+    intraday_timeout_seconds: int = 10
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -43,6 +45,11 @@ class Settings:
             futures_intel_config=_optional_path(os.getenv("FUTURES_INTEL_CONFIG")),
             futures_intel_timeout_seconds=int(
                 os.getenv("FUTURES_INTEL_TIMEOUT_SECONDS", "300")
+            ),
+            fetch_5m=os.getenv("FUTURES_KB_FETCH_5M", "0").strip().lower()
+            in {"1", "true", "yes", "on"},
+            intraday_timeout_seconds=int(
+                os.getenv("FUTURES_KB_5M_TIMEOUT_SECONDS", "10")
             ),
         )
 
