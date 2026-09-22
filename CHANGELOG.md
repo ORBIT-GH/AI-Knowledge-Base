@@ -2,6 +2,15 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.9] - 2026-09-22
+
+### Fixed
+
+- Keep valuation parameter gaps in `missing_sections` instead of removing them unconditionally.
+- Mark report packets `partial` when operating rate, inventory, warehouse receipts, valuation parameters, or news are unavailable.
+- Filter legacy seed news from compatible packets.
+- Preserve real RSS news only when it matches SH, V, or JM product keywords.
+
 ## [0.2.8] - 2026-09-22
 
 ### Added

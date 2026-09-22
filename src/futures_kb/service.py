@@ -231,6 +231,10 @@ class FuturesDataService:
             missing = sorted(required - supplied)
             if missing:
                 valuation[symbol] = missing
+                for name in missing:
+                    item = f"{symbol}:{name}"
+                    if item not in missing_sections:
+                        missing_sections.append(item)
             else:
                 valuation.pop(symbol, None)
             manual = market.get(symbol, {}).get("manual_metrics", {})
@@ -255,7 +259,10 @@ class FuturesDataService:
             missing_sections = [
                 item
                 for item in missing_sections
-                if not (item.startswith(f"{symbol}:") and item.split(":", 1)[1] in required)
+                if not (
+                    item.startswith(f"{symbol}:")
+                    and item.split(":", 1)[1] in (required - set(missing))
+                )
             ]
         quality["missing_sections"] = sorted(set(missing_sections))
         if not quality.get("missing_market_data") and not quality["missing_sections"]:
