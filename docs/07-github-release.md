@@ -20,23 +20,23 @@ uv build
 输出：
 
 ```text
-dist/futures_ai_kb-0.2.7.tar.gz
-dist/futures_ai_kb-0.2.7-py3-none-any.whl
+dist/futures_ai_kb-0.2.8.tar.gz
+dist/futures_ai_kb-0.2.8-py3-none-any.whl
 ```
 
 ## 3. 创建源码 ZIP
 
 ```powershell
 New-Item -ItemType Directory -Force dist | Out-Null
-git archive --format=zip --output dist/futures-ai-kb-v0.2.7-source.zip HEAD
+git archive --format=zip --output dist/futures-ai-kb-v0.2.8-source.zip HEAD
 ```
 
 ## 4. 创建 Git 标签
 
 ```powershell
-git tag -a v0.2.7 -m "Futures AI KB v0.2.7"
+git tag -a v0.2.8 -m "Futures AI KB v0.2.8"
 git push origin main
-git push origin v0.2.7
+git push origin v0.2.8
 ```
 
 如果远程默认分支是 `master`，将 `main` 替换为 `master`。
@@ -44,11 +44,11 @@ git push origin v0.2.7
 ## 5. 创建 GitHub Release
 
 ```powershell
-gh release create v0.2.7 `
-  dist/futures_ai_kb-0.2.7.tar.gz `
-  dist/futures_ai_kb-0.2.7-py3-none-any.whl `
-  dist/futures-ai-kb-v0.2.7-source.zip `
-  --title "Futures AI KB v0.2.7" `
+gh release create v0.2.8 `
+  dist/futures_ai_kb-0.2.8.tar.gz `
+  dist/futures_ai_kb-0.2.8-py3-none-any.whl `
+  dist/futures-ai-kb-v0.2.8-source.zip `
+  --title "Futures AI KB v0.2.8" `
   --notes-file CHANGELOG.md
 ```
 
@@ -65,7 +65,7 @@ gh release create v0.2.7 `
 提交全部改动并确保测试通过后，可以运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build_release.ps1 -Version 0.2.7
+powershell -ExecutionPolicy Bypass -File scripts\build_release.ps1 -Version 0.2.8
 ```
 
 脚本会依次执行测试、编译检查、构建 wheel/sdist，并生成源码 ZIP。

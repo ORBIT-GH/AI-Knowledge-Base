@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 的基本结构。
 
+## [0.2.8] - 2026-09-22
+
+### Added
+
+- Per-symbol `fundamental` object in daily report packets.
+- Multi-source spot quotes with date, quote type, unit, contract, and source.
+- Explicit operating rate, inventory, and warehouse receipt fields.
+- Explicit valuation parameter values for SH, V, and JM.
+- Manual metric aliases for operating rate, inventory, and warehouse receipts.
+- Real RSS source configuration for Eastmoney, Nasdaq Commodities, and WSJ Markets.
+- Source and product filtering for news to prevent unrelated articles entering reports.
+- Filtering of legacy seed demo data from production packets.
+
 ## [0.2.7] - 2026-09-21
 
 ### Added

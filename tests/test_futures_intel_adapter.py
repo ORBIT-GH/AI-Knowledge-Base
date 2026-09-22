@@ -440,6 +440,38 @@ def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
                 "unit": "x",
                 "source": "manual",
             },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "operating_rate",
+                "value": 82.5,
+                "unit": "%",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "inventory",
+                "value": 300000,
+                "unit": "t",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "warehouse_receipts",
+                "value": 12000,
+                "unit": "t",
+                "source": "manual",
+            },
+            {
+                "trade_date": "2026-09-10",
+                "symbol": "SH",
+                "metric": "spot_price_shandong",
+                "value": 1975,
+                "unit": "元/吨",
+                "source": "manual",
+            },
         ]
     )
     service.database.upsert_research_notes(
@@ -466,6 +498,16 @@ def test_service_routes_tools_to_futures_intel_backend(tmp_path: Path) -> None:
     ] is True
     assert "SH:raw_salt_price" not in packet["data_quality"]["missing_sections"]
     assert "native-news-1" in {item["id"] for item in packet["news"]}
+    manual = packet["symbols"]["SH"]["manual_metrics"]
+    assert manual["operating_rate"]["value"] == 82.5
+    assert manual["inventory"]["value"] == 300000
+    assert manual["warehouse_receipts"]["value"] == 12000
+    assert manual["valuation_parameters"]["raw_salt_price"]["value"] == 260
+    assert any(
+        item["quote_type"] == "spot_price_shandong"
+        and item["date"] == "2026-09-10"
+        for item in manual["spot_quotes"]
+    )
 
     listing = service.list_reports(
         date_from="2026-09-10",

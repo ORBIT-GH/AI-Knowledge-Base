@@ -549,7 +549,20 @@ class FuturesIntelAdapter:
                 SELECT quote_date, spec, region, quote_type, price, unit, source
                 FROM spot_prices
                 WHERE product_code=? AND quote_date<=?
-                ORDER BY quote_date DESC, fetched_at DESC LIMIT 3
+                ORDER BY quote_date DESC, fetched_at DESC LIMIT 20
+                """,
+                (symbol, trade_date),
+            )
+        ]
+        basis_spot_quotes = [
+            dict(row)
+            for row in self._query(
+                """
+                SELECT quote_date, contract, definition_id, spot_price,
+                       futures_price, basis_value, source
+                FROM basis_history
+                WHERE product_code=? AND quote_date<=? AND spot_price IS NOT NULL
+                ORDER BY quote_date DESC, fetched_at DESC LIMIT 5
                 """,
                 (symbol, trade_date),
             )
@@ -611,6 +624,37 @@ class FuturesIntelAdapter:
                 + "、".join(position_contracts)
                 + f"，主力 {contract}"
             )
+        spot_quotes = [
+            {
+                "date": item.get("quote_date"),
+                "price": _round(item.get("price")),
+                "unit": item.get("unit") or "元/吨",
+                "spec": item.get("spec") or "",
+                "region": item.get("region") or "",
+                "quote_type": item.get("quote_type") or "spot",
+                "contract": None,
+                "definition_id": None,
+                "source": item.get("source"),
+            }
+            for item in spots
+        ]
+        spot_quotes.extend(
+            {
+                "date": item.get("quote_date"),
+                "price": _round(item.get("spot_price")),
+                "unit": "元/吨",
+                "spec": "",
+                "region": "",
+                "quote_type": "basis_implied_spot",
+                "contract": item.get("contract"),
+                "definition_id": item.get("definition_id"),
+                "futures_price": _round(item.get("futures_price")),
+                "basis_value": _round(item.get("basis_value")),
+                "source": item.get("source"),
+            }
+            for item in basis_spot_quotes
+        )
+
         return {
             "name": SYMBOL_NAMES.get(symbol, symbol),
             "status": "ok",
@@ -622,8 +666,20 @@ class FuturesIntelAdapter:
                 "basis": _compact_mapping(basis),
                 "positions": [_compact_mapping(item) for item in positions],
                 "positions_contract": position_contracts or None,
+                "spot_quotes": spot_quotes,
+                "operating_rate": None,
+                "inventory": None,
+                "warehouse_receipts": None,
+                "valuation_parameters": {},
                 "spot_prices": [_compact_mapping(item) for item in spots],
                 "coal_prices": [_compact_mapping(item) for item in coal],
+            },
+            "fundamental": {
+                "spot_quotes": spot_quotes,
+                "operating_rate": None,
+                "inventory": None,
+                "warehouse_receipts": None,
+                "valuation_parameters": {},
             },
             "anomalies": anomalies,
         }
@@ -667,7 +723,7 @@ class FuturesIntelAdapter:
         results: list[dict[str, Any]] = []
         for row in rows:
             item_symbols = set(_json_list(row["products_json"]))
-            if item_symbols and not selected.intersection(item_symbols):
+            if not item_symbols or not selected.intersection(item_symbols):
                 continue
             results.append(_compact_news(dict(row), item_symbols))
             if len(results) >= limit:

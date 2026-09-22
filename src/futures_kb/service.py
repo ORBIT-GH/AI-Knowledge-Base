@@ -85,7 +85,13 @@ class FuturesDataService:
         for symbol in selected:
             if symbol not in market:
                 continue
-            metrics = self.database.get_manual_metrics(symbol, trade_date, limit=50)
+            metrics = {
+                name: record
+                for name, record in self.database.get_manual_metrics(
+                    symbol, trade_date, limit=50
+                ).items()
+                if str(record.get("source") or "").lower() != "seed"
+            }
             supplemental = {
                 name: {
                     "value": record.get("value"),
@@ -97,16 +103,76 @@ class FuturesDataService:
             }
             if supplemental:
                 supplemental_by_symbol[symbol] = supplemental
-                market[symbol].setdefault("manual_metrics", {})[
-                    "supplemental"
-                ] = supplemental
+                manual_metrics = market[symbol].setdefault("manual_metrics", {})
+                manual_metrics["supplemental"] = supplemental
+                manual_metrics["operating_rate"] = _first_metric(
+                    supplemental,
+                    "operating_rate",
+                    "utilization_rate",
+                    "开工率",
+                )
+                manual_metrics["inventory"] = _first_metric(
+                    supplemental,
+                    "inventory",
+                    "total_inventory",
+                    "social_inventory",
+                    "库存",
+                )
+                manual_metrics["warehouse_receipts"] = _first_metric(
+                    supplemental,
+                    "warehouse_receipts",
+                    "warehouse_receipt",
+                    "仓单",
+                )
+                valuation_names = {
+                    "raw_salt_price",
+                    "electricity_price",
+                    "liquid_chlorine_price",
+                    "calcium_carbide_price",
+                    "ethylene_price",
+                    "premium_discount_structure",
+                }
+                manual_metrics["valuation_parameters"] = {
+                    name: supplemental[name]
+                    for name in sorted(valuation_names)
+                    if name in supplemental
+                }
+                fundamental = market[symbol].setdefault("fundamental", {})
+                fundamental["operating_rate"] = manual_metrics["operating_rate"]
+                fundamental["inventory"] = manual_metrics["inventory"]
+                fundamental["warehouse_receipts"] = manual_metrics["warehouse_receipts"]
+                fundamental["valuation_parameters"] = manual_metrics[
+                    "valuation_parameters"
+                ]
+                spot_quotes = manual_metrics.setdefault("spot_quotes", [])
+                fundamental["spot_quotes"] = spot_quotes
+                for name, record in supplemental.items():
+                    if "spot" not in name:
+                        continue
+                    spot_quotes.append(
+                        {
+                            "date": record.get("date"),
+                            "price": record.get("value"),
+                            "unit": record.get("unit", ""),
+                            "spec": "",
+                            "region": "",
+                            "quote_type": name,
+                            "contract": None,
+                            "definition_id": None,
+                            "source": record.get("source", "manual"),
+                        }
+                    )
 
-        native_news = self.database.get_recent_research(
-            selected,
-            trade_date,
-            days=7,
-            limit=3,
-        )
+        native_news = [
+            item
+            for item in self.database.get_recent_research(
+                selected,
+                trade_date,
+                days=7,
+                limit=5,
+            )
+            if str(item.get("source") or "").lower() != "seed"
+        ][:3]
         if native_news:
             existing = {
                 str(item.get("id"))
@@ -167,6 +233,25 @@ class FuturesDataService:
                 valuation[symbol] = missing
             else:
                 valuation.pop(symbol, None)
+            manual = market.get(symbol, {}).get("manual_metrics", {})
+            required_fields = {
+                "operating_rate": set(
+                    {"operating_rate", "utilization_rate", "开工率"}
+                ),
+                "inventory": set(
+                    {"inventory", "total_inventory", "social_inventory", "库存"}
+                ),
+                "warehouse_receipts": set(
+                    {"warehouse_receipts", "warehouse_receipt", "仓单"}
+                ),
+            }
+            for field, aliases in required_fields.items():
+                if manual.get(field) is None:
+                    missing_sections.append(f"{symbol}:{field}")
+                else:
+                    missing_sections = [
+                        item for item in missing_sections if item != f"{symbol}:{field}"
+                    ]
             missing_sections = [
                 item
                 for item in missing_sections
@@ -428,6 +513,16 @@ def _compact_futures_intel_report(item: dict) -> dict[str, object]:
         "updated_at": item["updated_at"],
         "content_chars": item["content_chars"],
     }
+
+
+def _first_metric(
+    metrics: dict[str, dict],
+    *names: str,
+) -> dict | None:
+    for name in names:
+        if name in metrics:
+            return metrics[name]
+    return None
 
 
 def _compact_native_report(item: dict) -> dict[str, object]:

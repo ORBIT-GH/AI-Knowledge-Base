@@ -2,4 +2,4 @@ from futures_kb import __version__
 
 
 def test_package_version() -> None:
-    assert __version__ == "0.2.7"
+    assert __version__ == "0.2.8"
